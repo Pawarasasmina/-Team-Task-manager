@@ -19,12 +19,22 @@ export interface Team {
   updatedAt: string;
 }
 
+export interface Project {
+  _id: string;
+  name: string;
+  description?: string;
+  isActive?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface Task {
   _id: string;
   title: string;
   description: string;
   status: 'todo' | 'doing' | 'done';
   priority?: 'low' | 'medium' | 'high' | 'critical';
+  project?: Project | string | null;
   assignedTo: string | User;
   createdBy: string | User;
   isAssignedByAdmin: boolean;

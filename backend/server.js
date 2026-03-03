@@ -71,6 +71,7 @@ const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const taskRoutes = require('./routes/tasks');
 const teamRoutes = require('./routes/teams');
+const projectRoutes = require('./routes/projects');
 const notificationRoutes = require('./routes/notifications');
 
 // Use routes
@@ -78,6 +79,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/teams', teamRoutes);
+app.use('/api/projects', projectRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 // Health check route

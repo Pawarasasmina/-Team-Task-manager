@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Task = require('../models/Task');
+const Project = require('../models/Project');
 const Notification = require('../models/Notification');
 const { auth, isAdmin } = require('../middleware/auth');
 
@@ -10,6 +11,7 @@ router.get('/', auth, async (req, res) => {
   try {
     const tasks = await Task.find({ assignedTo: req.user._id })
       .populate('createdBy', 'name email')
+      .populate('project', 'name')
       .sort({ createdAt: -1 });
 
     res.json({
@@ -40,12 +42,24 @@ router.post('/', [
       });
     }
 
-    const { title, description, priority } = req.body;
+    const { title, description, priority, projectId } = req.body;
+
+    let project = null;
+    if (projectId) {
+      project = await Project.findOne({ _id: projectId, isActive: true });
+      if (!project) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid project selected'
+        });
+      }
+    }
 
     const task = new Task({
       title,
       description: description || '',
       priority: priority || 'medium',
+      project: project ? project._id : null,
       assignedTo: req.user._id,
       createdBy: req.user._id,
       isAssignedByAdmin: false
@@ -53,6 +67,7 @@ router.post('/', [
 
     await task.save();
     await task.populate('createdBy', 'name email');
+    await task.populate('project', 'name');
 
     res.status(201).json({
       success: true,
@@ -116,13 +131,26 @@ router.put('/:id', [
       });
     }
 
-    const { title, description } = req.body;
+    const { title, description, projectId } = req.body;
     
     if (title) task.title = title;
     if (description !== undefined) task.description = description;
+    if (projectId === '') {
+      task.project = null;
+    } else if (projectId) {
+      const project = await Project.findOne({ _id: projectId, isActive: true });
+      if (!project) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid project selected'
+        });
+      }
+      task.project = project._id;
+    }
 
     await task.save();
     await task.populate('createdBy', 'name email');
+    await task.populate('project', 'name');
 
     res.json({
       success: true,
@@ -222,6 +250,7 @@ router.patch('/:id/status', auth, [
     }
 
     await task.populate('createdBy', 'name email');
+    await task.populate('project', 'name');
 
     res.json({
       success: true,
@@ -305,7 +334,7 @@ router.post('/assign', [
       });
     }
 
-    const { title, description, userId, priority } = req.body;
+    const { title, description, userId, priority, projectId } = req.body;
 
     const User = require('../models/User');
     const user = await User.findById(userId);
@@ -317,10 +346,22 @@ router.post('/assign', [
       });
     }
 
+    let project = null;
+    if (projectId) {
+      project = await Project.findOne({ _id: projectId, isActive: true });
+      if (!project) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid project selected'
+        });
+      }
+    }
+
     const task = new Task({
       title,
       description: description || '',
       priority: priority || 'medium',
+      project: project ? project._id : null,
       assignedTo: userId,
       createdBy: req.user._id,
       isAssignedByAdmin: true
@@ -328,6 +369,7 @@ router.post('/assign', [
 
     await task.save();
     await task.populate('createdBy', 'name email');
+    await task.populate('project', 'name');
 
     console.log(`📢 Task "${title}" assigned to ${user.name} by admin ${req.user.name}`);
 
@@ -385,6 +427,7 @@ router.get('/admin/all', auth, isAdmin, async (req, res) => {
     const tasks = await Task.find()
       .populate('assignedTo', 'name email')
       .populate('createdBy', 'name email')
+      .populate('project', 'name')
       .sort({ createdAt: -1 });
 
     res.json({
@@ -417,7 +460,7 @@ router.post('/assign-team', [
       });
     }
 
-    const { title, description, userIds, priority } = req.body;
+    const { title, description, userIds, priority, projectId } = req.body;
     const User = require('../models/User');
     
     // Verify all users exist
@@ -429,6 +472,17 @@ router.post('/assign-team', [
       });
     }
 
+    let project = null;
+    if (projectId) {
+      project = await Project.findOne({ _id: projectId, isActive: true });
+      if (!project) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid project selected'
+        });
+      }
+    }
+
     // Create tasks for all users
     const tasks = await Promise.all(
       userIds.map(async (userId) => {
@@ -436,6 +490,7 @@ router.post('/assign-team', [
           title,
           description: description || '',
           priority: priority || 'medium',
+          project: project ? project._id : null,
           assignedTo: userId,
           createdBy: req.user._id,
           isAssignedByAdmin: true

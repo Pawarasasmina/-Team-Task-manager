@@ -74,11 +74,11 @@ const AdminTasksSummary: React.FC<AdminTasksSummaryProps> = ({
       const todayTotal = todayTodo.length + todayDoing.length + todayDone.length;
       const todayProgress = todayTotal > 0 ? Math.round((todayDone.length / todayTotal) * 100) : 0;
 
-      const pastDoneTasks = userTasks
-        .filter((t) => t.status === 'done' && t.updatedAt && toDateKey(t.updatedAt) !== todayKey)
+      const doneTasks = userTasks
+        .filter((t) => t.status === 'done' && t.updatedAt)
         .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
 
-      const pastHistory = pastDoneTasks.reduce((acc: Record<string, any[]>, task) => {
+      const doneHistory = doneTasks.reduce((acc: Record<string, any[]>, task) => {
         const key = toDateKey(task.updatedAt);
         if (!acc[key]) acc[key] = [];
         acc[key].push(task);
@@ -92,8 +92,8 @@ const AdminTasksSummary: React.FC<AdminTasksSummaryProps> = ({
         todayDone,
         todayTotal,
         todayProgress,
-        pastHistory,
-        historyDates: Object.keys(pastHistory).sort((a, b) => (a < b ? 1 : -1))
+        doneHistory,
+        historyDates: Object.keys(doneHistory).sort((a, b) => (a < b ? 1 : -1))
       };
     });
   }, [filteredUsers, allTasks, todayKey]);
@@ -234,13 +234,61 @@ const AdminTasksSummary: React.FC<AdminTasksSummaryProps> = ({
         <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/20">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h4 className="text-lg font-bold text-gray-800">{openHistoryRow.user.name} - Past Done Task History</h4>
-              <p className="text-xs text-gray-500">All previous days completed task list (today excluded)</p>
+              <h4 className="text-lg font-bold text-gray-800">{openHistoryRow.user.name} - Task Details</h4>
+              <p className="text-xs text-gray-500">Today task lists + done history (today and previous days)</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+              <h5 className="text-xs font-bold text-blue-700 mb-2">Today To-Do ({openHistoryRow.todayTodo.length})</h5>
+              {openHistoryRow.todayTodo.length === 0 ? (
+                <p className="text-xs text-blue-400">No tasks</p>
+              ) : (
+                <div className="space-y-2">
+                  {openHistoryRow.todayTodo.map((task) => (
+                    <div key={task._id} className="bg-white rounded border border-blue-100 p-2">
+                      <div className="text-xs font-semibold text-gray-800">{task.title}</div>
+                      {task.description && <div className="text-[11px] text-gray-600 mt-1">{task.description}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-orange-50 border border-orange-200 rounded-lg p-3">
+              <h5 className="text-xs font-bold text-orange-700 mb-2">Today Doing ({openHistoryRow.todayDoing.length})</h5>
+              {openHistoryRow.todayDoing.length === 0 ? (
+                <p className="text-xs text-orange-400">No tasks</p>
+              ) : (
+                <div className="space-y-2">
+                  {openHistoryRow.todayDoing.map((task) => (
+                    <div key={task._id} className="bg-white rounded border border-orange-100 p-2">
+                      <div className="text-xs font-semibold text-gray-800">{task.title}</div>
+                      {task.description && <div className="text-[11px] text-gray-600 mt-1">{task.description}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="bg-green-50 border border-green-200 rounded-lg p-3">
+              <h5 className="text-xs font-bold text-green-700 mb-2">Today Done ({openHistoryRow.todayDone.length})</h5>
+              {openHistoryRow.todayDone.length === 0 ? (
+                <p className="text-xs text-green-400">No tasks</p>
+              ) : (
+                <div className="space-y-2">
+                  {openHistoryRow.todayDone.map((task) => (
+                    <div key={task._id} className="bg-white rounded border border-green-100 p-2">
+                      <div className="text-xs font-semibold text-gray-800 line-through">{task.title}</div>
+                      {task.description && <div className="text-[11px] text-gray-600 mt-1">{task.description}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
           {openHistoryRow.historyDates.length === 0 ? (
-            <div className="text-center py-8 text-gray-500 text-sm">No past completed tasks available.</div>
+            <div className="text-center py-8 text-gray-500 text-sm">No completed task history available.</div>
           ) : (
             <div className="space-y-4">
               {openHistoryRow.historyDates.map((dateKey) => (
@@ -255,11 +303,11 @@ const AdminTasksSummary: React.FC<AdminTasksSummaryProps> = ({
                       })}
                     </span>
                     <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-full">
-                      {openHistoryRow.pastHistory[dateKey].length} done
+                      {openHistoryRow.doneHistory[dateKey].length} done
                     </span>
                   </div>
                   <div className="p-3 space-y-2">
-                    {openHistoryRow.pastHistory[dateKey].map((task) => {
+                    {openHistoryRow.doneHistory[dateKey].map((task) => {
                       const priorityStyle = getPriorityStyle(task.priority || 'medium');
                       return (
                         <div key={task._id} className="bg-white border border-gray-200 rounded-lg p-3">

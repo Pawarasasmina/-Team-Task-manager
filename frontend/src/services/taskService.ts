@@ -12,12 +12,12 @@ export const taskService = {
     return response.data;
   },
 
-  createTask: async (taskData: { title: string; description?: string }) => {
+  createTask: async (taskData: { title: string; description?: string; projectId?: string }) => {
     const response = await api.post('/tasks', taskData);
     return response.data;
   },
 
-  updateTask: async (taskId: string, taskData: { title?: string; description?: string }) => {
+  updateTask: async (taskId: string, taskData: { title?: string; description?: string; projectId?: string }) => {
     const response = await api.put(`/tasks/${taskId}`, taskData);
     return response.data;
   },
@@ -32,17 +32,18 @@ export const taskService = {
     return response.data;
   },
 
-  assignTask: async (taskData: { title: string; description?: string; userId: string; priority?: string }) => {
+  assignTask: async (taskData: { title: string; description?: string; userId: string; priority?: string; projectId?: string }) => {
     const response = await api.post('/tasks/assign', taskData);
     return response.data;
   },
 
-  assignTaskToTeam: async (taskData: { title: string; description?: string; userIds: string[]; teamId: string; priority?: string }) => {
+  assignTaskToTeam: async (taskData: { title: string; description?: string; userIds: string[]; teamId: string; priority?: string; projectId?: string }) => {
     const response = await api.post('/tasks/assign-team', {
       title: taskData.title,
       description: taskData.description,
       userIds: taskData.userIds,
-      priority: taskData.priority
+      priority: taskData.priority,
+      projectId: taskData.projectId
     });
     return response.data;
   },

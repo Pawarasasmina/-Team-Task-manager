@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { taskService } from '../services/taskService';
-import { Task } from '../types';
+import { projectService } from '../services/projectService';
+import { Task, Project } from '../types';
 import NotificationBell from '../components/NotificationBell';
 
 const UserDashboard: React.FC = () => {
@@ -14,7 +15,8 @@ const UserDashboard: React.FC = () => {
   const [showEditModal, setShowEditModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentTask, setCurrentTask] = useState<Task | null>(null);
-  const [formData, setFormData] = useState({ title: '', description: '' });
+  const [formData, setFormData] = useState({ title: '', description: '', projectId: '' });
+  const [projects, setProjects] = useState<Project[]>([]);
   const [passwordData, setPasswordData] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -23,6 +25,7 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     fetchTasks();
+    fetchProjects();
   }, []);
 
   const getPriorityStyle = (priority: string) => {
@@ -172,6 +175,21 @@ const UserDashboard: React.FC = () => {
     return [...header, ...taskLines].join('\n\n');
   };
 
+  const getTaskProjectName = (task: Task) => {
+    if (!task.project) return '';
+    if (typeof task.project === 'string') return 'Project Assigned';
+    return task.project.name || 'Project Assigned';
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const response = await projectService.getAllProjects();
+      setProjects(response.projects || []);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    }
+  };
+
   const handleSendToWhatsApp = (sectionLabel: string, sectionTasks: Task[]) => {
     try {
       const message = buildWhatsAppMessage(sectionLabel, sectionTasks);
@@ -193,7 +211,7 @@ const UserDashboard: React.FC = () => {
       await taskService.createTask(formData);
       setSuccess('Task added successfully!');
       setShowAddModal(false);
-      setFormData({ title: '', description: '' });
+      setFormData({ title: '', description: '', projectId: '' });
       fetchTasks();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -212,7 +230,7 @@ const UserDashboard: React.FC = () => {
       setSuccess('Task updated successfully!');
       setShowEditModal(false);
       setCurrentTask(null);
-      setFormData({ title: '', description: '' });
+      setFormData({ title: '', description: '', projectId: '' });
       fetchTasks();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -258,8 +276,13 @@ const UserDashboard: React.FC = () => {
   };
 
   const openEditModal = (task: Task) => {
+    const projectId = task.project
+      ? typeof task.project === 'string'
+        ? task.project
+        : task.project._id
+      : '';
     setCurrentTask(task);
-    setFormData({ title: task.title, description: task.description });
+    setFormData({ title: task.title, description: task.description, projectId });
     setShowEditModal(true);
     setError('');
   };
@@ -349,7 +372,7 @@ const UserDashboard: React.FC = () => {
               >
                 WhatsApp
               </button>
-              <button onClick={() => { setFormData({ title: '', description: '' }); setShowAddModal(true); setError(''); }} className="px-5 py-2 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/40">
+              <button onClick={() => { setFormData({ title: '', description: '', projectId: '' }); setShowAddModal(true); setError(''); }} className="px-5 py-2 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/40">
                 + Add Task
               </button>
             </div>
@@ -398,6 +421,9 @@ const UserDashboard: React.FC = () => {
                     </div>
                   </div>
                   {task.description && <div className="text-gray-600 text-sm mb-3 leading-relaxed">{task.description}</div>}
+                  {getTaskProjectName(task) && (
+                    <div className="text-xs text-indigo-600 mb-3 font-semibold">Project: {getTaskProjectName(task)}</div>
+                  )}
                   <div className="text-xs text-gray-400 mb-3">📅 Created: {new Date(task.createdAt).toLocaleString()}</div>
                   {!task.isAssignedByAdmin && (
                     <div className="flex gap-2 flex-wrap">
@@ -476,6 +502,9 @@ const UserDashboard: React.FC = () => {
                     </div>
                   </div>
                   {task.description && <div className="text-gray-600 text-sm mb-3 leading-relaxed">{task.description}</div>}
+                  {getTaskProjectName(task) && (
+                    <div className="text-xs text-indigo-600 mb-3 font-semibold">Project: {getTaskProjectName(task)}</div>
+                  )}
                   <div className="text-xs text-gray-400 mb-3">📅 Created: {new Date(task.createdAt).toLocaleString()}</div>
                 </div>
               );})
@@ -542,6 +571,9 @@ const UserDashboard: React.FC = () => {
                     </div>
                   </div>
                   {task.description && <div className="text-gray-600 text-sm mb-3 leading-relaxed">{task.description}</div>}
+                  {getTaskProjectName(task) && (
+                    <div className="text-xs text-indigo-600 mb-3 font-semibold">Project: {getTaskProjectName(task)}</div>
+                  )}
                   <div className="text-xs text-gray-400">✅ Completed: {new Date(task.updatedAt).toLocaleString()}</div>
                 </div>
               );})
@@ -562,6 +594,19 @@ const UserDashboard: React.FC = () => {
               <div className="mb-5">
                 <label className="block text-gray-800 mb-2 font-medium text-sm">Task Title *</label>
                 <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Enter task title" className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]" />
+              </div>
+              <div className="mb-5">
+                <label className="block text-gray-800 mb-2 font-medium text-sm">Project (Optional)</label>
+                <select
+                  value={formData.projectId}
+                  onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm bg-white cursor-pointer outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+                >
+                  <option value="">No Project</option>
+                  {projects.map((project) => (
+                    <option key={project._id} value={project._id}>{project.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="mb-5">
                 <label className="block text-gray-800 mb-2 font-medium text-sm">Description</label>
@@ -588,6 +633,19 @@ const UserDashboard: React.FC = () => {
               <div className="mb-5">
                 <label className="block text-gray-800 mb-2 font-medium text-sm">Task Title *</label>
                 <input type="text" value={formData.title} onChange={(e) => setFormData({ ...formData, title: e.target.value })} placeholder="Enter task title" className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]" />
+              </div>
+              <div className="mb-5">
+                <label className="block text-gray-800 mb-2 font-medium text-sm">Project (Optional)</label>
+                <select
+                  value={formData.projectId}
+                  onChange={(e) => setFormData({ ...formData, projectId: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm bg-white cursor-pointer outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+                >
+                  <option value="">No Project</option>
+                  {projects.map((project) => (
+                    <option key={project._id} value={project._id}>{project.name}</option>
+                  ))}
+                </select>
               </div>
               <div className="mb-5">
                 <label className="block text-gray-800 mb-2 font-medium text-sm">Description</label>

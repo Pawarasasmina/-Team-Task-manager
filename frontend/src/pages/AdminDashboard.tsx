@@ -4,27 +4,31 @@ import { useAuth } from '../context/AuthContext';
 import { userService } from '../services/userService';
 import { taskService } from '../services/taskService';
 import { teamService } from '../services/teamService';
-import { User, Team } from '../types';
+import { projectService } from '../services/projectService';
+import { User, Team, Project } from '../types';
 import AdminTasksSummary from '../components/AdminTasksSummary';
 import NotificationBell from '../components/NotificationBell';
 const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<'users' | 'teams' | 'tasks'>('users');
+  const [activeTab, setActiveTab] = useState<'users' | 'teams' | 'projects' | 'tasks'>('users');
   const [users, setUsers] = useState<User[]>([]);
   const [allTasks, setAllTasks] = useState<any[]>([]);
   const [teams, setTeams] = useState<Team[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [showEditUserModal, setShowEditUserModal] = useState(false);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showTeamModal, setShowTeamModal] = useState(false);
+  const [showProjectModal, setShowProjectModal] = useState(false);
   const [editingTeam, setEditingTeam] = useState<Team | null>(null);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [formData, setFormData] = useState({ name: '', email: '', contactNumber: '', password: '', team: '' });
   const [editUserData, setEditUserData] = useState({ name: '', email: '', contactNumber: '', team: '' });
-  const [assignData, setAssignData] = useState({ userId: '', teamId: '', title: '', description: '', priority: 'medium' });
+  const [assignData, setAssignData] = useState({ userId: '', teamId: '', title: '', description: '', priority: 'medium', projectId: '' });
   const [teamData, setTeamData] = useState({ name: '', description: '', members: [] as string[] });
+  const [projectData, setProjectData] = useState({ name: '', description: '' });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('');
   const [userSearchQuery, setUserSearchQuery] = useState('');
@@ -38,6 +42,7 @@ const AdminDashboard: React.FC = () => {
   useEffect(() => {
     fetchUsers();
     fetchTeams();
+    fetchProjects();
     fetchAllTasks();
   }, []);
 
@@ -171,7 +176,8 @@ const AdminDashboard: React.FC = () => {
           userIds: memberIds,
           title: assignData.title,
           description: assignData.description,
-          priority: assignData.priority
+          priority: assignData.priority,
+          projectId: assignData.projectId || undefined
         });
         setSuccess(`Task assigned successfully to ${memberIds.length} team member(s)!`);
       } else {
@@ -180,13 +186,14 @@ const AdminDashboard: React.FC = () => {
           userId: assignData.userId,
           title: assignData.title,
           description: assignData.description,
-          priority: assignData.priority
+          priority: assignData.priority,
+          projectId: assignData.projectId || undefined
         });
         setSuccess('Task assigned successfully!');
       }
       
       setShowAssignModal(false);
-      setAssignData({ userId: '', teamId: '', title: '', description: '', priority: 'medium' });
+      setAssignData({ userId: '', teamId: '', title: '', description: '', priority: 'medium', projectId: '' });
       fetchAllTasks();
       setTimeout(() => setSuccess(''), 3000);
     } catch (err: any) {
@@ -274,6 +281,36 @@ const AdminDashboard: React.FC = () => {
       return team?.name || 'No Team';
     }
     return user.team.name || 'No Team';
+  };
+
+  const handleCreateProject = async () => {
+    if (!projectData.name.trim()) {
+      setError('Project name is required');
+      return;
+    }
+
+    try {
+      await projectService.createProject({
+        name: projectData.name.trim(),
+        description: projectData.description
+      });
+      setSuccess('Project created successfully!');
+      setShowProjectModal(false);
+      setProjectData({ name: '', description: '' });
+      fetchProjects();
+      setTimeout(() => setSuccess(''), 3000);
+    } catch (err: any) {
+      setError(err.response?.data?.message || 'Failed to create project');
+    }
+  };
+
+  const fetchProjects = async () => {
+    try {
+      const response = await projectService.getAllProjects();
+      setProjects(response.projects || []);
+    } catch (err) {
+      console.error('Error fetching projects:', err);
+    }
   };
 
   const filteredUsers = users.filter((u) => {
@@ -408,7 +445,7 @@ const AdminDashboard: React.FC = () => {
               + User
             </button>
             <button
-              onClick={() => { setAssignData({ userId: '', teamId: '', title: '', description: '', priority: 'medium' }); setShowAssignModal(true); setError(''); }}
+              onClick={() => { setAssignData({ userId: '', teamId: '', title: '', description: '', priority: 'medium', projectId: '' }); setShowAssignModal(true); setError(''); }}
               className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700"
             >
               + Task
@@ -419,9 +456,15 @@ const AdminDashboard: React.FC = () => {
             >
               + Team
             </button>
+            <button
+              onClick={() => { setProjectData({ name: '', description: '' }); setShowProjectModal(true); setError(''); }}
+              className="px-3 py-2 bg-sky-600 text-white rounded-lg text-xs font-semibold hover:bg-sky-700"
+            >
+              + Project
+            </button>
           </div>
           <div className="text-xs text-gray-600 font-semibold">
-            {users.length} users | {teams.length} teams | {allTasks.length} tasks
+            {users.length} users | {teams.length} teams | {projects.length} projects | {allTasks.length} tasks
           </div>
         </div>
 
@@ -458,6 +501,17 @@ const AdminDashboard: React.FC = () => {
           >
             <span className="text-base">📋</span>
             <span>Tasks</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('projects')}
+            className={`flex-1 min-w-[110px] px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
+              activeTab === 'projects'
+                ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-lg'
+                : 'bg-white text-gray-600 hover:bg-gray-50 hover:shadow-md'
+            }`}
+          >
+            <span className="text-base">📁</span>
+            <span>Projects</span>
           </button>
         </div>
       </div>
@@ -658,6 +712,52 @@ const AdminDashboard: React.FC = () => {
       </div>
       )}
 
+      {activeTab === 'projects' && (
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 md:p-5 shadow-lg border border-white/20 animate-[fadeIn_0.3s_ease]">
+        <div className="flex justify-between items-center mb-3 flex-wrap gap-3">
+          <div>
+            <h3 className="text-gray-800 text-2xl font-bold flex items-center gap-2">
+              <span className="text-3xl">📁</span>
+              <span>Project Management</span>
+            </h3>
+            <span className="inline-block bg-gradient-to-r from-blue-100 to-purple-100 text-gray-700 px-4 py-2 rounded-full text-sm font-bold mt-2 shadow-md">
+              {projects.length} projects
+            </span>
+          </div>
+          <button
+            onClick={() => { setProjectData({ name: '', description: '' }); setShowProjectModal(true); setError(''); }}
+            className="px-3 py-2 bg-sky-600 text-white rounded-lg text-xs font-semibold hover:bg-sky-700"
+          >
+            + Create Project
+          </button>
+        </div>
+
+        <div className="max-h-[460px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          {projects.length === 0 ? (
+            <div className="text-center py-10 text-gray-400">
+              <p className="text-4xl mb-2">📁</p>
+              <p className="text-sm font-semibold">No projects created yet</p>
+              <p className="text-xs mt-1">Click "Create Project" to add your first project</p>
+            </div>
+          ) : (
+            <div className="grid gap-2">
+              {projects.map((project) => (
+                <div key={project._id} className="bg-white border border-gray-200 rounded-xl p-3 transition-all hover:shadow-md">
+                  <div className="font-semibold text-gray-800 text-sm mb-1">{project.name}</div>
+                  <div className="text-gray-600 text-xs">{project.description || 'No description provided'}</div>
+                  {project.createdAt && (
+                    <div className="text-[11px] text-gray-400 mt-2">
+                      Created: {new Date(project.createdAt).toLocaleString()}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+      )}
+
       {activeTab === 'tasks' && (
         <AdminTasksSummary
           allTasks={allTasks}
@@ -825,6 +925,22 @@ const AdminDashboard: React.FC = () => {
               </div>
 
               <div className="mb-5">
+                <label className="block text-gray-800 mb-2 font-medium text-sm">Project (Optional)</label>
+                <select
+                  value={assignData.projectId}
+                  onChange={(e) => setAssignData({ ...assignData, projectId: e.target.value })}
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm bg-white cursor-pointer outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+                >
+                  <option value="">No Project</option>
+                  {projects.map((project) => (
+                    <option key={project._id} value={project._id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-5">
                 <label className="block text-gray-800 mb-2 font-medium text-sm">Task Title *</label>
                 <input type="text" value={assignData.title} onChange={(e) => setAssignData({ ...assignData, title: e.target.value })} placeholder="Enter task title" className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]" />
               </div>
@@ -979,6 +1095,43 @@ const AdminDashboard: React.FC = () => {
               <button onClick={handleCreateOrUpdateTeam} className="px-5 py-2 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-lg text-sm font-semibold hover:-translate-y-0.5 hover:shadow-lg">
                 {editingTeam ? 'Update Team' : 'Create Team'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showProjectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-5" onClick={() => setShowProjectModal(false)}>
+          <div className="bg-white rounded-2xl p-8 w-full max-w-lg max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-gray-800 text-2xl font-bold">Create Project</h3>
+              <button onClick={() => setShowProjectModal(false)} className="w-8 h-8 flex items-center justify-center rounded-full text-2xl text-gray-400 hover:bg-gray-100 hover:text-gray-800">×</button>
+            </div>
+            <div className="mb-5">
+              {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-5 text-sm border-l-4 border-red-600">{error}</div>}
+              <div className="mb-5">
+                <label className="block text-gray-800 mb-2 font-medium text-sm">Project Name *</label>
+                <input
+                  type="text"
+                  value={projectData.name}
+                  onChange={(e) => setProjectData({ ...projectData, name: e.target.value })}
+                  placeholder="Enter project name"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+                />
+              </div>
+              <div className="mb-5">
+                <label className="block text-gray-800 mb-2 font-medium text-sm">Description</label>
+                <textarea
+                  value={projectData.description}
+                  onChange={(e) => setProjectData({ ...projectData, description: e.target.value })}
+                  placeholder="Enter project description (optional)"
+                  className="w-full min-h-[100px] px-4 py-3 border-2 border-gray-200 rounded-lg text-sm resize-y outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setShowProjectModal(false)} className="px-5 py-2 bg-gray-100 text-gray-800 rounded-lg text-sm font-semibold hover:bg-gray-200">Cancel</button>
+              <button onClick={handleCreateProject} className="px-5 py-2 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-lg text-sm font-semibold hover:-translate-y-0.5 hover:shadow-lg">Create Project</button>
             </div>
           </div>
         </div>
