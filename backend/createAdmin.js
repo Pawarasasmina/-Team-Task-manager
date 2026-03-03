@@ -2,8 +2,11 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-// Connect to MongoDB
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/taskmanager';
+const MONGODB_URI = process.env.MONGODB_URI;
+const ADMIN_NAME = process.env.ADMIN_NAME || 'Admin';
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || 'admin@example.com';
+const ADMIN_CONTACT_NUMBER = process.env.ADMIN_CONTACT_NUMBER || '1234567890';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin123';
 
 const userSchema = new mongoose.Schema({
   name: String,
@@ -18,44 +21,44 @@ const User = mongoose.model('User', userSchema);
 
 const createAdmin = async () => {
   try {
+    if (!MONGODB_URI) {
+      console.error('MONGODB_URI is required in environment variables.');
+      process.exit(1);
+    }
+
     console.log('Connecting to MongoDB...');
     await mongoose.connect(MONGODB_URI);
-    console.log('✅ Connected to MongoDB');
+    console.log('Connected to MongoDB');
 
-    // Check if admin already exists
-    const existingAdmin = await User.findOne({ email: 'admin@example.com' });
+    const existingAdmin = await User.findOne({ email: ADMIN_EMAIL });
     if (existingAdmin) {
-      console.log('⚠️  Admin account already exists!');
-      console.log('Email: admin@example.com');
+      console.log('Admin account already exists.');
+      console.log(`Email: ${ADMIN_EMAIL}`);
       process.exit(0);
     }
 
-    // Hash password
     const salt = await bcrypt.genSalt(10);
-    const hashedPassword = await bcrypt.hash('admin123', salt);
+    const hashedPassword = await bcrypt.hash(ADMIN_PASSWORD, salt);
 
-    // Create admin
     const admin = new User({
-      name: 'Admin',
-      email: 'admin@example.com',
-      contactNumber: '1234567890',
+      name: ADMIN_NAME,
+      email: ADMIN_EMAIL,
+      contactNumber: ADMIN_CONTACT_NUMBER,
       password: hashedPassword,
       role: 'admin',
       isPasswordChanged: true
     });
 
     await admin.save();
-    
-    console.log('\n✅ Admin account created successfully!');
-    console.log('═══════════════════════════════════');
-    console.log('📧 Email: admin@example.com');
-    console.log('🔑 Password: admin123');
-    console.log('═══════════════════════════════════');
-    console.log('\n⚠️  Please change the password after first login!\n');
-    
+
+    console.log('Admin account created successfully.');
+    console.log(`Email: ${ADMIN_EMAIL}`);
+    console.log(`Password: ${ADMIN_PASSWORD}`);
+    console.log('Please change the password after first login.');
+
     process.exit(0);
   } catch (error) {
-    console.error('❌ Error creating admin:', error.message);
+    console.error('Error creating admin:', error.message);
     process.exit(1);
   }
 };

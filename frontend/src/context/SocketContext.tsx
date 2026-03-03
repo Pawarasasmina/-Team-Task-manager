@@ -41,7 +41,8 @@ export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
     }
 
     const user = JSON.parse(userStr);
-    const socketUrl = 'http://localhost:5000';
+    const apiUrl = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+    const socketUrl = process.env.REACT_APP_SOCKET_URL || apiUrl.replace(/\/api\/?$/, '');
 
     console.log('🔌 Initializing socket connection to:', socketUrl);
     console.log('🔌 User ID to register:', user.id || user._id);

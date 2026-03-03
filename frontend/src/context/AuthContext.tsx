@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import axios from 'axios';
 import { User } from '../types';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+
 interface AuthContextType {
   user: User | null;
   token: string | null;
@@ -27,7 +29,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setToken(storedToken);
       
       // Fetch fresh user data with populated team
-      axios.get('http://localhost:5000/api/auth/me', {
+      axios.get(`${API_URL}/auth/me`, {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }

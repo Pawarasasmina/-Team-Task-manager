@@ -3,6 +3,10 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-size: 14px;
+  }
+
   body {
     @apply bg-gradient-to-br from-[#667eea] to-[#764ba2] min-h-screen font-sans antialiased;
   }

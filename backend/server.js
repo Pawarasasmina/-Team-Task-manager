@@ -11,13 +11,34 @@ dotenv.config();
 const app = express();
 const server = http.createServer(app);
 
+const requiredEnvVars = ['MONGODB_URI', 'JWT_SECRET'];
+const missingEnvVars = requiredEnvVars.filter((envName) => !process.env[envName]);
+
+if (missingEnvVars.length > 0) {
+  console.error(`Missing required environment variables: ${missingEnvVars.join(', ')}`);
+  process.exit(1);
+}
+
+const allowedOrigins = (process.env.CORS_ORIGINS || process.env.CLIENT_URL || 'http://localhost:3000')
+  .split(',')
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+const corsOptions = {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+      return;
+    }
+    callback(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  credentials: true
+};
+
 // Configure Socket.IO with proper CORS and settings
 const io = socketIO(server, {
-  cors: {
-    origin: 'http://localhost:3000',
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    credentials: true
-  },
+  cors: corsOptions,
   transports: ['polling', 'websocket'],
   allowEIO3: true
 });
@@ -26,7 +47,7 @@ const io = socketIO(server, {
 app.set('io', io);
 
 // Middleware
-app.use(cors());
+app.use(cors(corsOptions));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
@@ -89,7 +110,7 @@ app.get('/api/health', (req, res) => {
 
 // MongoDB connection
 const PORT = process.env.PORT || 5000;
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/taskmanager';
+const MONGODB_URI = process.env.MONGODB_URI;
 
 mongoose
   .connect(MONGODB_URI)
