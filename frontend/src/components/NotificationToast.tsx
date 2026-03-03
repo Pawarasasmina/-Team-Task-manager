@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 
 interface NotificationToastProps {
   id: string;
@@ -20,41 +20,43 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
   const [isVisible, setIsVisible] = useState(false);
   const [isExiting, setIsExiting] = useState(false);
 
-  console.log('🍞 NotificationToast rendered:', id, title, 'isVisible:', isVisible);
+  console.log('NotificationToast rendered:', id, title, 'isVisible:', isVisible);
 
-  useEffect(() => {
-    console.log('🍞 NotificationToast mounted:', id);
-    // Slide in animation
-    setTimeout(() => {
-      console.log('🍞 Setting isVisible to true for:', id);
-      setIsVisible(true);
-    }, 10);
-
-    // Auto-dismiss after 5 seconds
-    const timer = setTimeout(() => {
-      handleClose();
-    }, 5000);
-
-    return () => clearTimeout(timer);
-  }, []);
-
-  const handleClose = () => {
+  const handleClose = useCallback(() => {
     setIsExiting(true);
     setTimeout(() => {
       onClose(id);
     }, 300);
-  };
+  }, [id, onClose]);
+
+  useEffect(() => {
+    console.log('NotificationToast mounted:', id);
+
+    const enterTimer = setTimeout(() => {
+      console.log('Setting isVisible to true for:', id);
+      setIsVisible(true);
+    }, 10);
+
+    const dismissTimer = setTimeout(() => {
+      handleClose();
+    }, 5000);
+
+    return () => {
+      clearTimeout(enterTimer);
+      clearTimeout(dismissTimer);
+    };
+  }, [handleClose, id]);
 
   const getIcon = () => {
     switch (type) {
       case 'task_assigned':
-        return '📝';
+        return '??';
       case 'task_completed':
-        return '✅';
+        return '?';
       case 'task_updated':
-        return '🔄';
+        return '??';
       default:
-        return '🔔';
+        return '??';
     }
   };
 
@@ -79,18 +81,14 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
       style={{ width: '380px' }}
     >
       <div className="bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
-        {/* Colored Header Bar */}
         <div className={`h-1 bg-gradient-to-r ${getColors()}`} />
-        
-        {/* Content */}
+
         <div className="p-4">
           <div className="flex gap-3">
-            {/* Icon */}
             <div className="text-3xl flex-shrink-0">
               {getIcon()}
             </div>
-            
-            {/* Text Content */}
+
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between gap-2 mb-1">
                 <h4 className="font-bold text-sm text-gray-900">
@@ -100,7 +98,7 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
                   onClick={handleClose}
                   className="text-gray-400 hover:text-gray-600 text-xl leading-none flex-shrink-0"
                 >
-                  ×
+                  �
                 </button>
               </div>
               <p className="text-sm text-gray-700 mb-2 line-clamp-2">
@@ -115,7 +113,6 @@ const NotificationToast: React.FC<NotificationToastProps> = ({
           </div>
         </div>
 
-        {/* Progress Bar */}
         <div className="h-1 bg-gray-100">
           <div
             className={`h-full bg-gradient-to-r ${getColors()} transition-all duration-[5000ms] ease-linear`}

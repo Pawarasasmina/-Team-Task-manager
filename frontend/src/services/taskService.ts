@@ -1,5 +1,4 @@
 import api from './api';
-import { Task } from '../types';
 
 export const taskService = {
   getAllTasks: async () => {
