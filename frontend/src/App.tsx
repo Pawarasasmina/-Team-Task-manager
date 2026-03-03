@@ -1,6 +1,8 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SocketProvider } from './context/SocketContext';
+import { ToastProvider } from './context/ToastContext';
 import Login from './pages/Login';
 import UserDashboard from './pages/UserDashboard';
 import AdminDashboard from './pages/AdminDashboard';
@@ -66,7 +68,11 @@ function App() {
   return (
     <Router>
       <AuthProvider>
-        <AppRoutes />
+        <ToastProvider>
+          <SocketProvider>
+            <AppRoutes />
+          </SocketProvider>
+        </ToastProvider>
       </AuthProvider>
     </Router>
   );

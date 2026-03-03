@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { taskService } from '../services/taskService';
 import { Task } from '../types';
+import NotificationBell from '../components/NotificationBell';
 
 const UserDashboard: React.FC = () => {
   const { user, logout } = useAuth();
@@ -264,6 +265,7 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
         <div className="flex gap-3">
+          <NotificationBell />
           <button onClick={() => navigate('/profile')} className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-bold transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/40 active:scale-95 flex items-center gap-2">
             <span>👤</span>
             <span>My Profile</span>

@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { body, validationResult } = require('express-validator');
 const Task = require('../models/Task');
+const Notification = require('../models/Notification');
 const { auth, isAdmin } = require('../middleware/auth');
 
 // Get all tasks for current user
@@ -150,7 +151,7 @@ router.patch('/:id/status', auth, [
       });
     }
 
-    const task = await Task.findById(req.params.id);
+    const task = await Task.findById(req.params.id).populate('createdBy', 'name email role');
 
     if (!task) {
       return res.status(404).json({ 
@@ -167,8 +168,59 @@ router.patch('/:id/status', auth, [
       });
     }
 
+    const oldStatus = task.status;
     task.status = req.body.status;
     await task.save();
+
+    // If task is marked as done, notify all admins
+    if (req.body.status === 'done' && oldStatus !== 'done') {
+      const User = require('../models/User');
+      const admins = await User.find({ role: 'admin' });
+      
+      console.log(`📢 Task "${task.title}" completed by ${req.user.name}, notifying ${admins.length} admin(s)`);
+      
+      for (const admin of admins) {
+        // Skip sending notification to the user who completed the task if they are also an admin
+        if (admin._id.toString() === req.user._id.toString()) {
+          console.log(`⏭️  Skipping notification to self (admin who completed task)`);
+          continue;
+        }
+
+        const notification = new Notification({
+          recipient: admin._id,
+          sender: req.user._id,
+          type: 'task_completed',
+          title: 'Task Completed',
+          message: `${req.user.name} has completed the task: "${task.title}"`,
+          task: task._id
+        });
+        await notification.save();
+        console.log(`💾 Notification saved to DB for admin ${admin.name}`);
+        
+        // Send real-time notification via Socket.IO
+        const io = req.app.get('io');
+        const connectedUsers = req.app.get('connectedUsers');
+        const adminSocketId = connectedUsers.get(admin._id.toString());
+        
+        if (adminSocketId) {
+          const notificationPayload = {
+            _id: notification._id,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            sender: { name: req.user.name },
+            task: { title: task.title },
+            createdAt: notification.createdAt,
+            isRead: false
+          };
+          io.to(adminSocketId).emit('notification', notificationPayload);
+          console.log(`📡 Real-time notification emitted to admin ${admin.name} (socket: ${adminSocketId})`);
+        } else {
+          console.log(`⚠️  Admin ${admin.name} is not connected (no active socket)`);
+        }
+      }
+    }
+
     await task.populate('createdBy', 'name email');
 
     res.json({
@@ -253,7 +305,7 @@ router.post('/assign', [
       });
     }
 
-const { title, description, userId, priority } = req.body;
+    const { title, description, userId, priority } = req.body;
 
     const User = require('../models/User');
     const user = await User.findById(userId);
@@ -276,6 +328,42 @@ const { title, description, userId, priority } = req.body;
 
     await task.save();
     await task.populate('createdBy', 'name email');
+
+    console.log(`📢 Task "${title}" assigned to ${user.name} by admin ${req.user.name}`);
+
+    // Create notification for assigned user
+    const notification = new Notification({
+      recipient: userId,
+      sender: req.user._id,
+      type: 'task_assigned',
+      title: 'New Task Assigned',
+      message: `You have been assigned a new task: "${title}"`,
+      task: task._id
+    });
+    await notification.save();
+    console.log(`💾 Notification saved to DB for user ${user.name}`);
+
+    // Send real-time notification via Socket.IO
+    const io = req.app.get('io');
+    const connectedUsers = req.app.get('connectedUsers');
+    const userSocketId = connectedUsers.get(userId.toString());
+    
+    if (userSocketId) {
+      const notificationPayload = {
+        _id: notification._id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        sender: { name: req.user.name },
+        task: { title: task.title },
+        createdAt: notification.createdAt,
+        isRead: false
+      };
+      io.to(userSocketId).emit('notification', notificationPayload);
+      console.log(`📡 Real-time notification emitted to user ${user.name} (socket: ${userSocketId})`);
+    } else {
+      console.log(`⚠️  User ${user.name} is not connected (no active socket)`);
+    }
 
     res.status(201).json({
       success: true,
@@ -353,6 +441,36 @@ router.post('/assign-team', [
           isAssignedByAdmin: true
         });
         await task.save();
+        
+        // Create notification for each assigned user
+        const notification = new Notification({
+          recipient: userId,
+          sender: req.user._id,
+          type: 'task_assigned',
+          title: 'New Task Assigned',
+          message: `You have been assigned a new task: "${title}"`,
+          task: task._id
+        });
+        await notification.save();
+
+        // Send real-time notification via Socket.IO
+        const io = req.app.get('io');
+        const connectedUsers = req.app.get('connectedUsers');
+        const userSocketId = connectedUsers.get(userId.toString());
+        
+        if (userSocketId) {
+          io.to(userSocketId).emit('notification', {
+            _id: notification._id,
+            type: notification.type,
+            title: notification.title,
+            message: notification.message,
+            sender: { name: req.user.name },
+            task: { title: task.title },
+            createdAt: notification.createdAt,
+            isRead: false
+          });
+        }
+        
         return task;
       })
     );
@@ -365,105 +483,6 @@ router.post('/assign-team', [
     });
   } catch (error) {
     console.error('Assign task to team error:', error);
-    res.status(500).json({ 
-      success: false, 
-      message: 'Server error' 
-    });
-  }
-});
-
-// Get analytics data (admin only)
-router.get('/analytics', auth, isAdmin, async (req, res) => {
-  try {
-    const { period, userId, teamId } = req.query;
-
-    // Calculate date range based on period
-    let startDate = new Date();
-    switch (period) {
-      case 'day':
-        startDate.setHours(0, 0, 0, 0);
-        break;
-      case 'week':
-        startDate.setDate(startDate.getDate() - 7);
-        break;
-      case 'month':
-        startDate.setMonth(startDate.getMonth() - 1);
-        break;
-      default:
-        startDate = new Date(0); // All time
-    }
-
-    // Build query filter
-    const filter = { createdAt: { $gte: startDate } };
-    
-    if (userId) {
-      filter.assignedTo = userId;
-    }
-
-    if (teamId) {
-      const User = require('../models/User');
-      const teamUsers = await User.find({ team: teamId }).select('_id');
-      filter.assignedTo = { $in: teamUsers.map(u => u._id) };
-    }
-
-    // Get all tasks matching filter
-    const allTasks = await Task.find(filter).populate('assignedTo', 'name email team');
-
-    // Calculate statistics
-    const stats = {
-      total: allTasks.length,
-      todo: allTasks.filter(t => t.status === 'todo').length,
-      doing: allTasks.filter(t => t.status === 'doing').length,
-      done: allTasks.filter(t => t.status === 'done').length,
-      byPriority: {
-        critical: allTasks.filter(t => t.priority === 'critical').length,
-        high: allTasks.filter(t => t.priority === 'high').length,
-        medium: allTasks.filter(t => t.priority === 'medium').length,
-        low: allTasks.filter(t => t.priority === 'low').length
-      },
-      completionRate: allTasks.length > 0 
-        ? ((allTasks.filter(t => t.status === 'done').length / allTasks.length) * 100).toFixed(1)
-        : 0,
-      recentTasks: allTasks.slice(0, 10).map(task => ({
-        _id: task._id,
-        title: task.title,
-        status: task.status,
-        priority: task.priority,
-        assignedTo: task.assignedTo,
-        createdAt: task.createdAt,
-        updatedAt: task.updatedAt
-      }))
-    };
-
-    // Get user-wise breakdown
-    const userStats = {};
-    allTasks.forEach(task => {
-      const userId = task.assignedTo?._id?.toString();
-      if (userId) {
-        if (!userStats[userId]) {
-          userStats[userId] = {
-            user: task.assignedTo,
-            total: 0,
-            todo: 0,
-            doing: 0,
-            done: 0
-          };
-        }
-        userStats[userId].total++;
-        userStats[userId][task.status]++;
-      }
-    });
-
-    stats.userBreakdown = Object.values(userStats);
-
-    res.json({
-      success: true,
-      stats,
-      period,
-      startDate
-    });
-  } catch (error) {
-    console.error('Get analytics error:', error);
     res.status(500).json({ 
       success: false, 
       message: 'Server error' 

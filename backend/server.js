@@ -2,28 +2,83 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const dotenv = require('dotenv');
+const http = require('http');
+const socketIO = require('socket.io');
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
+
+// Configure Socket.IO with proper CORS and settings
+const io = socketIO(server, {
+  cors: {
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    credentials: true
+  },
+  transports: ['polling', 'websocket'],
+  allowEIO3: true
+});
+
+// Make io accessible to routes
+app.set('io', io);
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// Socket.IO connection handling
+const connectedUsers = new Map();
+
+io.on('connection', (socket) => {
+  console.log('🔌 User connected:', socket.id);
+
+  socket.on('register', (userId) => {
+    if (userId) {
+      connectedUsers.set(userId, socket.id);
+      console.log(`👤 User ${userId} registered with socket ${socket.id}`);
+      console.log(`📊 Total connected users: ${connectedUsers.size}`);
+    } else {
+      console.log('⚠️  User registration attempted without userId');
+    }
+  });
+
+  socket.on('disconnect', () => {
+    let disconnectedUserId = null;
+    for (const [userId, socketId] of connectedUsers.entries()) {
+      if (socketId === socket.id) {
+        disconnectedUserId = userId;
+        connectedUsers.delete(userId);
+        console.log(`👤 User ${userId} disconnected`);
+        console.log(`📊 Total connected users: ${connectedUsers.size}`);
+        break;
+      }
+    }
+    if (!disconnectedUserId) {
+      console.log(`🔌 Unregistered socket ${socket.id} disconnected`);
+    }
+  });
+});
+
+// Store connected users map for routes to access
+app.set('connectedUsers', connectedUsers);
+
 // Import routes
 const authRoutes = require('./routes/auth');
 const userRoutes = require('./routes/users');
 const taskRoutes = require('./routes/tasks');
 const teamRoutes = require('./routes/teams');
+const notificationRoutes = require('./routes/notifications');
 
 // Use routes
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/teams', teamRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Health check route
 app.get('/api/health', (req, res) => {
@@ -38,8 +93,9 @@ mongoose
   .connect(MONGODB_URI)
   .then(() => {
     console.log('✅ Connected to MongoDB');
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       console.log(`🚀 Server is running on port ${PORT}`);
+      console.log(`🔌 Socket.IO is ready`);
     });
   })
   .catch((error) => {

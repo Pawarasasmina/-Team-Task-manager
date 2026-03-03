@@ -5,7 +5,7 @@ import { userService } from '../services/userService';
 import { taskService } from '../services/taskService';
 import { teamService } from '../services/teamService';
 import { User, Team } from '../types';
-
+import AdminTasksSummary from '../components/AdminTasksSummary';import NotificationBell from '../components/NotificationBell';
 const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -28,6 +28,8 @@ const AdminDashboard: React.FC = () => {
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [showAllUsers, setShowAllUsers] = useState(false);
+  const [showAllDoneTasks, setShowAllDoneTasks] = useState(false);
 
   useEffect(() => {
     fetchUsers();
@@ -339,6 +341,7 @@ const AdminDashboard: React.FC = () => {
           </p>
         </div>
         <div className="flex gap-3">
+          <NotificationBell />
           <button onClick={() => navigate('/profile')} className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-semibold transition-all hover:from-indigo-700 hover:to-purple-700 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/40 active:scale-95">
             <span className="flex items-center gap-2">
               <span>👤</span>
@@ -427,7 +430,7 @@ const AdminDashboard: React.FC = () => {
             </div>
           ) : (
             <div className="grid gap-4">
-            {users.map(u => (
+            {(showAllUsers ? users : users.slice(0, 5)).map(u => (
               <div key={u.id} className="bg-gradient-to-r from-white to-gray-50 border-l-4 border-[#667eea] rounded-2xl p-6 transition-all hover:shadow-2xl hover:scale-[1.02] hover:border-l-8 group">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
@@ -466,6 +469,19 @@ const AdminDashboard: React.FC = () => {
                 </div>
               </div>
             ))}
+            </div>
+          )}
+          
+          {/* See More Button for Users */}
+          {users.length > 5 && (
+            <div className="mt-6 text-center">
+              <button
+                onClick={() => setShowAllUsers(!showAllUsers)}
+                className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-bold transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/40 active:scale-95 flex items-center gap-2 mx-auto"
+              >
+                <span>{showAllUsers ? '👆' : '👇'}</span>
+                <span>{showAllUsers ? 'Show Less' : `See More (${users.length - 5} more)`}</span>
+              </button>
             </div>
           )}
         </div>
@@ -561,192 +577,19 @@ const AdminDashboard: React.FC = () => {
       )}
 
       {activeTab === 'tasks' && (
-      <div className="bg-white rounded-2xl p-6 shadow-lg">
-        <div className="flex justify-between items-center mb-5 flex-wrap gap-4">
-          <div>
-            <h3 className="text-gray-800 text-xl font-bold">📋 Task Overview</h3>
-            <span className="inline-block bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm font-semibold mt-1">{allTasks.length} total tasks</span>
-          </div>
-          <div className="flex gap-2">
-            <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
-              {allTasks.filter(t => t.status === 'todo').length} To-Do
-            </span>
-            <span className="inline-block bg-green-100 text-green-700 px-3 py-1 rounded-full text-xs font-semibold">
-              {allTasks.filter(t => t.status === 'done').length} Done
-            </span>
-          </div>
-        </div>
-
-        {/* Search and Filter */}
-        <div className="mb-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-gray-700 text-xs font-semibold mb-2">🔍 Search by User Name</label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Type user name..."
-              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
-            />
-          </div>
-          <div>
-            <label className="block text-gray-700 text-xs font-semibold mb-2">🏢 Filter by Team</label>
-            <select
-              value={selectedTeamFilter}
-              onChange={(e) => setSelectedTeamFilter(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg text-sm bg-white cursor-pointer outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
-            >
-              <option value="">All Teams ({users.length} users)</option>
-              {teams.map(team => {
-                const teamUserCount = users.filter(u => {
-                  const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-                  return userTeamId === team._id;
-                }).length;
-                return (
-                  <option key={team._id} value={team._id}>{team.name} ({teamUserCount} users)</option>
-                );
-              })}
-              <option value="no-team">Users Without Team ({users.filter(u => !u.team).length})</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="max-h-[600px] overflow-y-auto pr-1 scrollbar-thin">
-          {allTasks.length === 0 ? (
-            <div className="text-center py-10 text-gray-400"><p>No tasks available</p></div>
-          ) : (
-            <div className="space-y-6">
-              {users.filter(u => {
-                // Filter by search query
-                const matchesSearch = searchQuery.trim() === '' || 
-                  u.name.toLowerCase().includes(searchQuery.toLowerCase());
-                
-                // Filter by team
-                let matchesTeam = true;
-                if (selectedTeamFilter) {
-                  if (selectedTeamFilter === 'no-team') {
-                    matchesTeam = !u.team;
-                  } else {
-                    const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-                    matchesTeam = userTeamId === selectedTeamFilter;
-                  }
-                }
-                
-                return matchesSearch && matchesTeam;
-              }).map(u => {
-                const userTasks = allTasks.filter(t => 
-                  (typeof t.assignedTo === 'string' ? t.assignedTo : t.assignedTo?._id) === u.id
-                );
-                
-                if (userTasks.length === 0) return null;
-                
-                const todoTasks = userTasks.filter(t => t.status === 'todo');
-                const doneTasks = userTasks.filter(t => t.status === 'done');
-                
-                return (
-                  <div key={u.id} className="border-2 border-gray-200 rounded-xl p-4 hover:shadow-md transition-all">
-                    <div className="flex justify-between items-start mb-3 pb-3 border-b border-gray-200">
-                      <div>
-                        <h4 className="font-semibold text-gray-800 text-base">{u.name}</h4>
-                        <p className="text-xs text-gray-500">{u.email}</p>
-                        {u.team && (
-                          <span className="inline-block bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-xs font-semibold mt-1">
-                            🏢 {getTeamName(u)}
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex gap-2">
-                        <span className="inline-block bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs font-semibold">
-                          {todoTasks.length} To-Do
-                        </span>
-                        <span className="inline-block bg-green-100 text-green-700 px-2 py-1 rounded text-xs font-semibold">
-                          {doneTasks.length} Done
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* To-Do Tasks */}
-                      <div>
-                        <h5 className="text-xs font-semibold text-gray-600 uppercase mb-2">� To-Do Tasks</h5>
-                        {todoTasks.length === 0 ? (
-                          <p className="text-xs text-gray-400 italic">No pending tasks</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {todoTasks.map(task => {
-                              const priorityStyle = getPriorityStyle(task.priority || 'medium');
-                              return (
-                              <div key={task._id} className={`${priorityStyle.bgClass} border-l-4 ${priorityStyle.borderClass} rounded p-3`}>
-                                <div className="flex justify-between items-start mb-2 gap-2">
-                                  <div className="font-medium text-sm text-gray-800 flex-1">{task.title}</div>
-                                  <span className={`${priorityStyle.badge} px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 whitespace-nowrap`}>
-                                    <span>{priorityStyle.icon}</span>
-                                    <span>{priorityStyle.text}</span>
-                                  </span>
-                                </div>
-                                {task.description && (
-                                  <div className="text-xs text-gray-600 mb-2">{task.description}</div>
-                                )}
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-gray-500">
-                                    Created: {new Date(task.createdAt).toLocaleString()}
-                                  </span>
-                                  {task.isAssignedByAdmin && (
-                                    <span className="inline-block bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-semibold">
-                                      Admin Assigned
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );})}
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Done Tasks */}
-                      <div>
-                        <h5 className="text-xs font-semibold text-gray-600 uppercase mb-2">✅ Completed Tasks</h5>
-                        {doneTasks.length === 0 ? (
-                          <p className="text-xs text-gray-400 italic">No completed tasks</p>
-                        ) : (
-                          <div className="space-y-2">
-                            {doneTasks.map(task => {
-                              const priorityStyle = getPriorityStyle(task.priority || 'medium');
-                              return (
-                              <div key={task._id} className={`${priorityStyle.bgClass} border-l-4 ${priorityStyle.borderClass} rounded p-3 opacity-70`}>
-                                <div className="flex justify-between items-start mb-2 gap-2">
-                                  <div className="font-medium text-sm text-gray-800 flex-1 line-through">{task.title}</div>
-                                  <span className={`${priorityStyle.badge} px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 whitespace-nowrap`}>
-                                    <span>{priorityStyle.icon}</span>
-                                    <span>{priorityStyle.text}</span>
-                                  </span>
-                                </div>
-                                {task.description && (
-                                  <div className="text-xs text-gray-600 mb-2">{task.description}</div>
-                                )}
-                                <div className="flex justify-between items-center">
-                                  <span className="text-xs text-gray-500">
-                                    Completed: {new Date(task.updatedAt).toLocaleString()}
-                                  </span>
-                                  {task.isAssignedByAdmin && (
-                                    <span className="inline-block bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-xs font-semibold">
-                                      Admin Assigned
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            );})}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+        <AdminTasksSummary
+          allTasks={allTasks}
+          users={users}
+          teams={teams}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          selectedTeamFilter={selectedTeamFilter}
+          setSelectedTeamFilter={setSelectedTeamFilter}
+          getTeamName={getTeamName}
+          getPriorityStyle={getPriorityStyle}
+          showAllDoneTasks={showAllDoneTasks}
+          setShowAllDoneTasks={setShowAllDoneTasks}
+        />
       )}
 
       {showRegisterModal && (
@@ -849,11 +692,7 @@ const AdminDashboard: React.FC = () => {
             <div className="mb-5">
               {error && <div className="bg-red-50 text-red-600 p-3 rounded-lg mb-5 text-sm border-l-4 border-red-600">{error}</div>}
               
-              {/* Assignment Type Selection */}
-              <div className="mb-5 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-800 font-medium mb-2">💡 Choose Assignment Type:</p>
-                <p className="text-xs text-blue-600">Select either a single user OR a team (all team members will be assigned)</p>
-              </div>
+             
 
               <div className="mb-5">
                 <label className="block text-gray-800 mb-2 font-medium text-sm">Select User</label>

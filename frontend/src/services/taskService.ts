@@ -46,9 +46,4 @@ export const taskService = {
     });
     return response.data;
   },
-
-  getAnalytics: async (params?: { period?: string; userId?: string; teamId?: string }) => {
-    const response = await api.get('/tasks/analytics', { params });
-    return response.data;
-  },
 };
