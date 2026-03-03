@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { User } from '../types';
 
 interface AdminTasksSummaryProps {
@@ -15,6 +15,20 @@ interface AdminTasksSummaryProps {
   setShowAllDoneTasks: (show: boolean) => void;
 }
 
+const toDateKey = (dateValue: string | Date) => {
+  const d = new Date(dateValue);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+};
+
+const getAssignedUserId = (task: any) => {
+  if (!task?.assignedTo) return null;
+  if (typeof task.assignedTo === 'string') return task.assignedTo;
+  return task.assignedTo._id || task.assignedTo.id || null;
+};
+
 const AdminTasksSummary: React.FC<AdminTasksSummaryProps> = ({
   allTasks,
   users,
@@ -24,574 +38,251 @@ const AdminTasksSummary: React.FC<AdminTasksSummaryProps> = ({
   selectedTeamFilter,
   setSelectedTeamFilter,
   getTeamName,
-  getPriorityStyle,
-  showAllDoneTasks,
-  setShowAllDoneTasks
+  getPriorityStyle
 }) => {
-  const [expandedUsers, setExpandedUsers] = React.useState<Set<string>>(new Set());
+  const [openHistoryUserId, setOpenHistoryUserId] = useState<string | null>(null);
 
-  const toggleUserExpanded = (userId: string) => {
-    setExpandedUsers(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(userId)) {
-        newSet.delete(userId);
-      } else {
-        newSet.add(userId);
+  const todayKey = useMemo(() => toDateKey(new Date()), []);
+
+  const filteredUsers = useMemo(() => {
+    return users.filter((u) => {
+      const matchesSearch =
+        searchQuery.trim() === '' || u.name.toLowerCase().includes(searchQuery.toLowerCase());
+
+      let matchesTeam = true;
+      if (selectedTeamFilter) {
+        if (selectedTeamFilter === 'no-team') {
+          matchesTeam = !u.team;
+        } else {
+          const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
+          matchesTeam = userTeamId === selectedTeamFilter;
+        }
       }
-      return newSet;
+
+      return matchesSearch && matchesTeam;
     });
+  }, [users, searchQuery, selectedTeamFilter]);
+
+  const tableRows = useMemo(() => {
+    return filteredUsers.map((u) => {
+      const userTasks = allTasks.filter((t) => getAssignedUserId(t) === u.id);
+
+      const todayTodo = userTasks.filter((t) => t.status === 'todo' && t.createdAt && toDateKey(t.createdAt) === todayKey);
+      const todayDoing = userTasks.filter((t) => t.status === 'doing' && t.createdAt && toDateKey(t.createdAt) === todayKey);
+      const todayDone = userTasks.filter((t) => t.status === 'done' && t.updatedAt && toDateKey(t.updatedAt) === todayKey);
+
+      const todayTotal = todayTodo.length + todayDoing.length + todayDone.length;
+      const todayProgress = todayTotal > 0 ? Math.round((todayDone.length / todayTotal) * 100) : 0;
+
+      const pastDoneTasks = userTasks
+        .filter((t) => t.status === 'done' && t.updatedAt && toDateKey(t.updatedAt) !== todayKey)
+        .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+      const pastHistory = pastDoneTasks.reduce((acc: Record<string, any[]>, task) => {
+        const key = toDateKey(task.updatedAt);
+        if (!acc[key]) acc[key] = [];
+        acc[key].push(task);
+        return acc;
+      }, {});
+
+      return {
+        user: u,
+        todayTodo,
+        todayDoing,
+        todayDone,
+        todayTotal,
+        todayProgress,
+        pastHistory,
+        historyDates: Object.keys(pastHistory).sort((a, b) => (a < b ? 1 : -1))
+      };
+    });
+  }, [filteredUsers, allTasks, todayKey]);
+
+  const openHistoryRow = tableRows.find((r) => r.user.id === openHistoryUserId) || null;
+
+  const renderTodayTaskList = (tasks: any[], tone: 'blue' | 'orange' | 'green') => {
+    const toneMap = {
+      blue: 'bg-blue-100 text-blue-700',
+      orange: 'bg-orange-100 text-orange-700',
+      green: 'bg-green-100 text-green-700'
+    };
+
+    if (tasks.length === 0) {
+      return <span className="text-xs text-gray-400">No tasks</span>;
+    }
+
+    return (
+      <div className="space-y-1 text-left">
+        {tasks.map((task) => (
+          <div key={task._id} className={`px-2 py-1 rounded text-xs font-medium ${toneMap[tone]}`}>
+            {task.title}
+          </div>
+        ))}
+      </div>
+    );
   };
 
   return (
-    <div className="space-y-5 animate-[fadeIn_0.3s_ease]">
-      {/* Compact Statistics Cards */}
+    <div className="space-y-4 animate-[fadeIn_0.3s_ease]">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        {/* Total Tasks Card */}
-        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-3 text-white shadow-md hover:shadow-lg transition-all">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="text-2xl">📋</div>
-            <div className="text-2xl font-bold">{allTasks.length}</div>
-          </div>
-          <div className="text-purple-100 text-xs font-medium">All Tasks</div>
+        <div className="bg-gradient-to-br from-purple-500 to-purple-600 rounded-lg p-3 text-white shadow-md">
+          <div className="text-xs text-purple-100">All Tasks</div>
+          <div className="text-2xl font-bold">{allTasks.length}</div>
         </div>
-
-        {/* To-Do Tasks Card */}
-        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-3 text-white shadow-md hover:shadow-lg transition-all">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="text-2xl">📝</div>
-            <div className="text-2xl font-bold">{allTasks.filter(t => t.status === 'todo').length}</div>
-          </div>
-          <div className="text-blue-100 text-xs font-medium">To-Do</div>
+        <div className="bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg p-3 text-white shadow-md">
+          <div className="text-xs text-blue-100">To-Do</div>
+          <div className="text-2xl font-bold">{allTasks.filter((t) => t.status === 'todo').length}</div>
         </div>
-
-        {/* Doing Tasks Card */}
-        <div className="bg-gradient-to-br from-yellow-500 to-orange-500 rounded-lg p-3 text-white shadow-md hover:shadow-lg transition-all">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="text-2xl">🚀</div>
-            <div className="text-2xl font-bold">{allTasks.filter(t => t.status === 'doing').length}</div>
-          </div>
-          <div className="text-orange-100 text-xs font-medium">In Progress</div>
+        <div className="bg-gradient-to-br from-orange-500 to-yellow-500 rounded-lg p-3 text-white shadow-md">
+          <div className="text-xs text-orange-100">In Progress</div>
+          <div className="text-2xl font-bold">{allTasks.filter((t) => t.status === 'doing').length}</div>
         </div>
-
-        {/* Done Tasks Card */}
-        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-3 text-white shadow-md hover:shadow-lg transition-all">
-          <div className="flex items-center gap-2 mb-1">
-            <div className="text-2xl">✅</div>
-            <div className="text-2xl font-bold">{allTasks.filter(t => t.status === 'done').length}</div>
-          </div>
-          <div className="text-green-100 text-xs font-medium">Completed</div>
+        <div className="bg-gradient-to-br from-green-500 to-green-600 rounded-lg p-3 text-white shadow-md">
+          <div className="text-xs text-green-100">Completed</div>
+          <div className="text-2xl font-bold">{allTasks.filter((t) => t.status === 'done').length}</div>
         </div>
       </div>
 
-      {/* Minimalistic Users & Done Tasks Summary */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
-        <div className="flex justify-between items-center mb-5">
-          <div>
-            <h3 className="text-gray-800 text-xl font-bold flex items-center gap-2">
-              <span className="text-2xl">✅</span>
-              <span>Users & Completed Tasks</span>
-            </h3>
-          </div>
-          <div className="text-xs font-semibold text-green-600">
-            {allTasks.filter(t => t.status === 'done').length} Total Done
-          </div>
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/20">
+        <div className="mb-4">
+          <h3 className="text-gray-800 text-xl font-bold">User Performance Summary</h3>
+          <p className="text-xs text-gray-600">Table shows only today tasks. View Details shows all past days done tasks.</p>
         </div>
 
-        {/* Minimalistic List */}
-        <div className="space-y-1.5">
-          {users
-            .filter(u => {
-              const matchesSearch = searchQuery.trim() === '' || 
-                u.name.toLowerCase().includes(searchQuery.toLowerCase());
-              
-              let matchesTeam = true;
-              if (selectedTeamFilter) {
-                if (selectedTeamFilter === 'no-team') {
-                  matchesTeam = !u.team;
-                } else {
-                  const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-                  matchesTeam = userTeamId === selectedTeamFilter;
-                }
-              }
-              
-              return matchesSearch && matchesTeam;
-            })
-            .slice(0, showAllDoneTasks ? undefined : 5)
-            .map((u) => {
-              const userTasks = allTasks.filter(t => 
-                (typeof t.assignedTo === 'string' ? t.assignedTo : t.assignedTo?._id) === u.id
-              );
-              
-              const doneTasks = userTasks.filter(t => t.status === 'done');
-              const isExpanded = expandedUsers.has(u.id);
-              const displayedTasks = isExpanded ? doneTasks : doneTasks.slice(0, 5);
-              
+        <div className="mb-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search employee name..."
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm outline-none focus:border-indigo-500"
+          />
+          <select
+            value={selectedTeamFilter}
+            onChange={(e) => setSelectedTeamFilter(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white outline-none focus:border-indigo-500"
+          >
+            <option value="">All Teams ({users.length} users)</option>
+            {teams.map((team) => {
+              const teamUserCount = users.filter((u) => {
+                const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
+                return userTeamId === team._id;
+              }).length;
               return (
-                <div key={u.id} className="bg-white border border-gray-200 rounded-lg hover:border-green-400 transition-all">
-                  {/* User Row - Minimal */}
-                  <div className="flex items-center justify-between px-3 py-2 bg-green-50/30">
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                      <div className="w-7 h-7 rounded-full bg-green-500 flex items-center justify-center text-white font-bold text-xs flex-shrink-0">
-                        {u.name.charAt(0).toUpperCase()}
-                      </div>
-                      <span className="font-semibold text-gray-800 text-sm truncate">{u.name}</span>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <span className="bg-green-100 text-green-700 px-2.5 py-0.5 rounded-full font-bold text-xs">
-                        {doneTasks.length} done
-                      </span>
-                    </div>
-                  </div>
-                  
-                  {/* Task List - Always Visible */}
-                  {doneTasks.length > 0 && (
-                    <div className="border-t border-gray-100 px-3 py-2 bg-gray-50/50">
-                      <div className="space-y-1">
-                        {displayedTasks.map((task, index) => (
-                          <div key={task._id} className="flex items-center gap-2 text-xs py-1">
-                            <span className="text-green-600 font-bold w-4 flex-shrink-0">{index + 1}.</span>
-                            <span className="text-gray-700 line-through flex-1 truncate">{task.title}</span>
-                            <span className="text-gray-400 text-xs flex-shrink-0">
-                              {new Date(task.updatedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      {/* See More Button for Individual User */}
-                      {doneTasks.length > 5 && (
-                        <div className="mt-3 text-center">
-                          <button
-                            onClick={() => toggleUserExpanded(u.id)}
-                            className="px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-lg text-xs font-bold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-green-500/30 active:scale-95 flex items-center gap-1.5 mx-auto"
-                          >
-                            <span>{isExpanded ? '👆' : '👇'}</span>
-                            <span>{isExpanded ? 'Show Less' : `See ${doneTasks.length - 5} More`}</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <option key={team._id} value={team._id}>
+                  {team.name} ({teamUserCount} users)
+                </option>
               );
             })}
-          
-          {users.filter(u => {
-            const matchesSearch = searchQuery.trim() === '' || 
-              u.name.toLowerCase().includes(searchQuery.toLowerCase());
-            
-            let matchesTeam = true;
-            if (selectedTeamFilter) {
-              if (selectedTeamFilter === 'no-team') {
-                matchesTeam = !u.team;
-              } else {
-                const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-                matchesTeam = userTeamId === selectedTeamFilter;
-              }
-            }
-            
-            return matchesSearch && matchesTeam;
-          }).length === 0 && (
-            <div className="text-center py-12 text-gray-400">
-              <p className="text-6xl mb-3">👥</p>
-              <p className="text-lg font-semibold">No users found</p>
-              <p className="text-sm mt-2">Try adjusting your search or filter</p>
-            </div>
-          )}
-        </div>
-        
-        {/* See More Button for Done Tasks */}
-        {users.filter(u => {
-          const matchesSearch = searchQuery.trim() === '' || 
-            u.name.toLowerCase().includes(searchQuery.toLowerCase());
-          
-          let matchesTeam = true;
-          if (selectedTeamFilter) {
-            if (selectedTeamFilter === 'no-team') {
-              matchesTeam = !u.team;
-            } else {
-              const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-              matchesTeam = userTeamId === selectedTeamFilter;
-            }
-          }
-          
-          return matchesSearch && matchesTeam;
-        }).length > 5 && (
-          <div className="mt-6 text-center">
-            <button
-              onClick={() => setShowAllDoneTasks(!showAllDoneTasks)}
-              className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-bold transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-green-500/40 active:scale-95 flex items-center gap-2 mx-auto"
-            >
-              <span>{showAllDoneTasks ? '👆' : '👇'}</span>
-              <span>{showAllDoneTasks ? 'Show Less' : `See More (${users.filter(u => {
-                const matchesSearch = searchQuery.trim() === '' || 
-                  u.name.toLowerCase().includes(searchQuery.toLowerCase());
-                
-                let matchesTeam = true;
-                if (selectedTeamFilter) {
-                  if (selectedTeamFilter === 'no-team') {
-                    matchesTeam = !u.team;
-                  } else {
-                    const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-                    matchesTeam = userTeamId === selectedTeamFilter;
-                  }
-                }
-                
-                return matchesSearch && matchesTeam;
-              }).length - 5} more)`}</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* User Performance Summary */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
-        <div className="flex justify-between items-center mb-5">
-          <div>
-            <h3 className="text-gray-800 text-2xl font-bold flex items-center gap-2">
-              <span className="text-3xl">📊</span>
-              <span>User Performance Summary</span>
-            </h3>
-            <p className="text-sm text-gray-600 mt-1">Quick overview of all users and their task completion</p>
-          </div>
+            <option value="no-team">Users Without Team ({users.filter((u) => !u.team).length})</option>
+          </select>
         </div>
 
-        {/* Search and Filter */}
-        <div className="mb-5 grid grid-cols-1 md:grid-cols-2 gap-3">
-          <div>
-            <label className="block text-gray-700 text-xs font-semibold mb-2">🔍 Search by User Name</label>
-            <input
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Type user name..."
-              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)] transition-all"
-            />
-          </div>
-          <div>
-            <label className="block text-gray-700 text-xs font-semibold mb-2">🏢 Filter by Team</label>
-            <select
-              value={selectedTeamFilter}
-              onChange={(e) => setSelectedTeamFilter(e.target.value)}
-              className="w-full px-4 py-2 border-2 border-gray-200 rounded-lg text-sm bg-white cursor-pointer outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)] transition-all"
-            >
-              <option value="">All Teams ({users.length} users)</option>
-              {teams.map(team => {
-                const teamUserCount = users.filter(u => {
-                  const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-                  return userTeamId === team._id;
-                }).length;
-                return (
-                  <option key={team._id} value={team._id}>{team.name} ({teamUserCount} users)</option>
-                );
-              })}
-              <option value="no-team">Users Without Team ({users.filter(u => !u.team).length})</option>
-            </select>
-          </div>
-        </div>
-
-        {/* Compact User Summary Table */}
         <div className="overflow-x-auto">
-          <table className="w-full">
+          <table className="w-full text-sm">
             <thead>
-              <tr className="bg-gradient-to-r from-indigo-50 to-purple-50 border-b-2 border-indigo-200">
-                <th className="px-4 py-3 text-left text-xs font-bold text-gray-700 uppercase tracking-wider">User</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Team</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">📝 To-Do</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">🚀 Doing</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">✅ Done</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Total</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Progress</th>
-                <th className="px-4 py-3 text-center text-xs font-bold text-gray-700 uppercase tracking-wider">Actions</th>
+              <tr className="bg-gray-50 border-y border-gray-200">
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Employee</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Team</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Today To-Do Tasks</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Today Doing Tasks</th>
+                <th className="px-3 py-2 text-left font-semibold text-gray-700">Today Done Tasks</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Today Total</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Today Progress</th>
+                <th className="px-3 py-2 text-center font-semibold text-gray-700">Actions</th>
               </tr>
             </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {users.filter(u => {
-                const matchesSearch = searchQuery.trim() === '' || 
-                  u.name.toLowerCase().includes(searchQuery.toLowerCase());
-                
-                let matchesTeam = true;
-                if (selectedTeamFilter) {
-                  if (selectedTeamFilter === 'no-team') {
-                    matchesTeam = !u.team;
-                  } else {
-                    const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-                    matchesTeam = userTeamId === selectedTeamFilter;
-                  }
-                }
-                
-                return matchesSearch && matchesTeam;
-              }).map(u => {
-                const userTasks = allTasks.filter(t => 
-                  (typeof t.assignedTo === 'string' ? t.assignedTo : t.assignedTo?._id) === u.id
-                );
-                
-                const todoCount = userTasks.filter(t => t.status === 'todo').length;
-                const doingCount = userTasks.filter(t => t.status === 'doing').length;
-                const doneCount = userTasks.filter(t => t.status === 'done').length;
-                const totalCount = userTasks.length;
-                const progressPercent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
-                
-                return (
-                  <tr key={u.id} className="hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 transition-all">
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-lg">
-                          {u.name.charAt(0).toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-semibold text-gray-800">{u.name}</div>
-                          <div className="text-xs text-gray-500">{u.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      {u.team ? (
-                        <span className="inline-block bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-xs font-semibold">
-                          🏢 {getTeamName(u)}
-                        </span>
-                      ) : (
-                        <span className="inline-block bg-gray-100 text-gray-500 px-3 py-1 rounded-full text-xs font-semibold">
-                          No Team
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-blue-100 text-blue-700 font-bold text-sm shadow-sm">
-                        {todoCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-orange-100 text-orange-700 font-bold text-sm shadow-sm">
-                        {doingCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-green-100 text-green-700 font-bold text-sm shadow-sm">
-                        {doneCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <span className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-purple-100 text-purple-700 font-bold text-sm shadow-sm">
-                        {totalCount}
-                      </span>
-                    </td>
-                    <td className="px-4 py-4">
-                      <div className="flex flex-col items-center gap-2">
-                        <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                          <div 
-                            className={`h-full rounded-full transition-all duration-500 ${
-                              progressPercent === 100 ? 'bg-gradient-to-r from-green-400 to-green-600' :
-                              progressPercent >= 70 ? 'bg-gradient-to-r from-blue-400 to-blue-600' :
-                              progressPercent >= 40 ? 'bg-gradient-to-r from-yellow-400 to-orange-500' :
-                              'bg-gradient-to-r from-red-400 to-red-600'
-                            }`}
-                            style={{ width: `${progressPercent}%` }}
-                          ></div>
-                        </div>
-                        <span className={`text-xs font-bold ${
-                          progressPercent === 100 ? 'text-green-600' :
-                          progressPercent >= 70 ? 'text-blue-600' :
-                          progressPercent >= 40 ? 'text-orange-600' :
-                          'text-red-600'
-                        }`}>
-                          {progressPercent}%
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-4 text-center">
-                      <button
-                        onClick={() => {
-                          const userTaskDetails = document.getElementById(`user-tasks-${u.id}`);
-                          if (userTaskDetails) {
-                            userTaskDetails.classList.toggle('hidden');
-                          }
-                        }}
-                        className="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-xs font-semibold hover:shadow-lg transition-all hover:scale-105"
-                      >
-                        👁️ View Details
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
+            <tbody>
+              {tableRows.map((row) => (
+                <tr key={row.user.id} className="border-b border-gray-100 hover:bg-indigo-50/50">
+                  <td className="px-3 py-2">
+                    <div className="font-semibold text-gray-800">{row.user.name}</div>
+                    <div className="text-xs text-gray-500">{row.user.email}</div>
+                  </td>
+                  <td className="px-3 py-2 text-center text-xs text-gray-700">{getTeamName(row.user)}</td>
+                  <td className="px-3 py-2 align-top min-w-[220px]">{renderTodayTaskList(row.todayTodo, 'blue')}</td>
+                  <td className="px-3 py-2 align-top min-w-[220px]">{renderTodayTaskList(row.todayDoing, 'orange')}</td>
+                  <td className="px-3 py-2 align-top min-w-[220px]">{renderTodayTaskList(row.todayDone, 'green')}</td>
+                  <td className="px-3 py-2 text-center"><span className="inline-flex items-center justify-center min-w-[30px] h-7 px-2 rounded-full bg-purple-100 text-purple-700 font-semibold text-xs">{row.todayTotal}</span></td>
+                  <td className="px-3 py-2 text-center">
+                    <span className="inline-flex items-center justify-center min-w-[42px] h-7 px-2 rounded-full bg-gray-100 text-gray-700 font-semibold text-xs">
+                      {row.todayProgress}%
+                    </span>
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <button
+                      onClick={() =>
+                        setOpenHistoryUserId((prev) => (prev === row.user.id ? null : row.user.id))
+                      }
+                      className="px-3 py-1.5 bg-indigo-600 text-white rounded-md text-xs font-semibold hover:bg-indigo-700"
+                    >
+                      {openHistoryUserId === row.user.id ? 'Hide' : 'View Details'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>
 
-        {users.filter(u => {
-          const matchesSearch = searchQuery.trim() === '' || 
-            u.name.toLowerCase().includes(searchQuery.toLowerCase());
-          let matchesTeam = true;
-          if (selectedTeamFilter) {
-            if (selectedTeamFilter === 'no-team') {
-              matchesTeam = !u.team;
-            } else {
-              const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-              matchesTeam = userTeamId === selectedTeamFilter;
-            }
-          }
-          return matchesSearch && matchesTeam;
-        }).length === 0 && (
-          <div className="text-center py-10 text-gray-400 mt-5">
-            <p className="text-5xl mb-3">🔍</p>
-            <p className="text-lg font-semibold">No users found</p>
-            <p className="text-sm mt-2">Try adjusting your search or filter</p>
-          </div>
+        {tableRows.length === 0 && (
+          <div className="text-center py-8 text-gray-500 text-sm">No employees found for current filters.</div>
         )}
       </div>
 
-      {/* Expandable Task Details */}
-      {users.filter(u => {
-        const matchesSearch = searchQuery.trim() === '' || 
-          u.name.toLowerCase().includes(searchQuery.toLowerCase());
-        let matchesTeam = true;
-        if (selectedTeamFilter) {
-          if (selectedTeamFilter === 'no-team') {
-            matchesTeam = !u.team;
-          } else {
-            const userTeamId = u.team ? (typeof u.team === 'string' ? u.team : u.team._id) : null;
-            matchesTeam = userTeamId === selectedTeamFilter;
-          }
-        }
-        return matchesSearch && matchesTeam;
-      }).map(u => {
-        const userTasks = allTasks.filter(t => 
-          (typeof t.assignedTo === 'string' ? t.assignedTo : t.assignedTo?._id) === u.id
-        );
-        
-        if (userTasks.length === 0) return null;
-        
-        const todoTasks = userTasks.filter(t => t.status === 'todo');
-        const doingTasks = userTasks.filter(t => t.status === 'doing');
-        const doneTasks = userTasks.filter(t => t.status === 'done');
-        
-        return (
-          <div key={`details-${u.id}`} id={`user-tasks-${u.id}`} className="hidden bg-white/80 backdrop-blur-sm rounded-2xl p-6 shadow-xl border border-white/20">
-            <div className="flex justify-between items-start mb-5">
-              <div>
-                <h4 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                  <span className="text-2xl">👤</span>
-                  <span>{u.name}'s Tasks</span>
-                </h4>
-                <p className="text-sm text-gray-600 mt-1">{u.email}</p>
-              </div>
-              <button
-                onClick={() => {
-                  const userTaskDetails = document.getElementById(`user-tasks-${u.id}`);
-                  if (userTaskDetails) {
-                    userTaskDetails.classList.add('hidden');
-                  }
-                }}
-                className="px-3 py-1.5 bg-gray-200 text-gray-700 rounded-lg text-sm font-semibold hover:bg-gray-300 transition-all"
-              >
-                ✕ Close
-              </button>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* To-Do Column */}
-              <div className="bg-blue-50 rounded-xl p-4 border-2 border-blue-200">
-                <h5 className="text-sm font-bold text-blue-700 uppercase mb-3 flex items-center gap-2">
-                  <span>📝</span>
-                  <span>To-Do ({todoTasks.length})</span>
-                </h5>
-                {todoTasks.length === 0 ? (
-                  <p className="text-xs text-blue-400 italic text-center py-4">No pending tasks</p>
-                ) : (
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-blue-300 scrollbar-track-blue-100">
-                    {todoTasks.map(task => {
-                      const priorityStyle = getPriorityStyle(task.priority || 'medium');
-                      return (
-                        <div key={task._id} className="bg-white rounded-lg p-3 shadow-sm border border-blue-200 hover:shadow-md transition-all">
-                          <div className="flex justify-between items-start mb-2 gap-2">
-                            <div className="font-semibold text-sm text-gray-800 flex-1">{task.title}</div>
-                            <span className={`${priorityStyle.badge} px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 whitespace-nowrap flex-shrink-0`}>
-                              <span>{priorityStyle.icon}</span>
-                            </span>
-                          </div>
-                          {task.description && (
-                            <div className="text-xs text-gray-600 mb-2 line-clamp-2">{task.description}</div>
-                          )}
-                          <div className="text-xs text-gray-500">
-                            {new Date(task.createdAt).toLocaleDateString()}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Doing Column */}
-              <div className="bg-orange-50 rounded-xl p-4 border-2 border-orange-200">
-                <h5 className="text-sm font-bold text-orange-700 uppercase mb-3 flex items-center gap-2">
-                  <span>🚀</span>
-                  <span>Doing ({doingTasks.length})</span>
-                </h5>
-                {doingTasks.length === 0 ? (
-                  <p className="text-xs text-orange-400 italic text-center py-4">No tasks in progress</p>
-                ) : (
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-orange-300 scrollbar-track-orange-100">
-                    {doingTasks.map(task => {
-                      const priorityStyle = getPriorityStyle(task.priority || 'medium');
-                      return (
-                        <div key={task._id} className="bg-white rounded-lg p-3 shadow-sm border border-orange-200 hover:shadow-md transition-all">
-                          <div className="flex justify-between items-start mb-2 gap-2">
-                            <div className="font-semibold text-sm text-gray-800 flex-1">{task.title}</div>
-                            <span className={`${priorityStyle.badge} px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 whitespace-nowrap flex-shrink-0`}>
-                              <span>{priorityStyle.icon}</span>
-                            </span>
-                          </div>
-                          {task.description && (
-                            <div className="text-xs text-gray-600 mb-2 line-clamp-2">{task.description}</div>
-                          )}
-                          <div className="text-xs text-gray-500">
-                            {new Date(task.createdAt).toLocaleDateString()}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Done Column */}
-              <div className="bg-green-50 rounded-xl p-4 border-2 border-green-200">
-                <h5 className="text-sm font-bold text-green-700 uppercase mb-3 flex items-center gap-2">
-                  <span>✅</span>
-                  <span>Done ({doneTasks.length})</span>
-                </h5>
-                {doneTasks.length === 0 ? (
-                  <p className="text-xs text-green-400 italic text-center py-4">No completed tasks</p>
-                ) : (
-                  <div className="space-y-2 max-h-[400px] overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-green-300 scrollbar-track-green-100">
-                    {doneTasks.map(task => {
-                      const priorityStyle = getPriorityStyle(task.priority || 'medium');
-                      return (
-                        <div key={task._id} className="bg-white rounded-lg p-3 shadow-sm border border-green-200 hover:shadow-md transition-all opacity-80">
-                          <div className="flex justify-between items-start mb-2 gap-2">
-                            <div className="font-semibold text-sm text-gray-800 flex-1 line-through">{task.title}</div>
-                            <span className={`${priorityStyle.badge} px-2 py-0.5 rounded-full text-xs font-bold flex items-center gap-1 whitespace-nowrap flex-shrink-0`}>
-                              <span>{priorityStyle.icon}</span>
-                            </span>
-                          </div>
-                          {task.description && (
-                            <div className="text-xs text-gray-600 mb-2 line-clamp-2">{task.description}</div>
-                          )}
-                          <div className="text-xs text-gray-500">
-                            {new Date(task.updatedAt).toLocaleDateString()}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+      {openHistoryRow && (
+        <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 shadow-lg border border-white/20">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h4 className="text-lg font-bold text-gray-800">{openHistoryRow.user.name} - Past Done Task History</h4>
+              <p className="text-xs text-gray-500">All previous days completed task list (today excluded)</p>
             </div>
           </div>
-        );
-      })}
+
+          {openHistoryRow.historyDates.length === 0 ? (
+            <div className="text-center py-8 text-gray-500 text-sm">No past completed tasks available.</div>
+          ) : (
+            <div className="space-y-4">
+              {openHistoryRow.historyDates.map((dateKey) => (
+                <div key={dateKey} className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div className="px-4 py-2 bg-gray-50 border-b border-gray-200 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-gray-700">
+                      {new Date(dateKey).toLocaleDateString(undefined, {
+                        weekday: 'short',
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </span>
+                    <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-1 rounded-full">
+                      {openHistoryRow.pastHistory[dateKey].length} done
+                    </span>
+                  </div>
+                  <div className="p-3 space-y-2">
+                    {openHistoryRow.pastHistory[dateKey].map((task) => {
+                      const priorityStyle = getPriorityStyle(task.priority || 'medium');
+                      return (
+                        <div key={task._id} className="bg-white border border-gray-200 rounded-lg p-3">
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="font-semibold text-sm text-gray-800 line-through">{task.title}</div>
+                            <span className={`${priorityStyle.badge} px-2 py-0.5 rounded-full text-[11px] font-semibold`}>
+                              {priorityStyle.text}
+                            </span>
+                          </div>
+                          {task.description && <div className="text-xs text-gray-600 mt-1">{task.description}</div>}
+                          <div className="text-[11px] text-gray-500 mt-1">
+                            Completed: {new Date(task.updatedAt).toLocaleTimeString()}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

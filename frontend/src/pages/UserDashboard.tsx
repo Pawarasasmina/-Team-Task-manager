@@ -143,6 +143,46 @@ const UserDashboard: React.FC = () => {
   const doingTasks = tasks.filter(task => task.status === 'doing');
   const doneTasks = tasks.filter(task => task.status === 'done');
 
+  const buildWhatsAppMessage = (sectionLabel: string, sectionTasks: Task[]) => {
+    const employeeName = user?.name || 'Employee';
+    const reportDate = new Date().toLocaleDateString(undefined, {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric'
+    });
+
+    const header = [
+      `Task Update - ${sectionLabel}`,
+      `Employee: ${employeeName}`,
+      `Date: ${reportDate}`,
+      ''
+    ];
+
+    if (sectionTasks.length === 0) {
+      return [...header, `No tasks in ${sectionLabel}.`].join('\n');
+    }
+
+    const taskLines = sectionTasks.map((task, index) => {
+      const priority = (task.priority || 'medium').toUpperCase();
+      const description = task.description?.trim() ? `\n   Note: ${task.description}` : '';
+
+      return `${index + 1}. ${task.title}${description}\n   Priority: ${priority}`;
+    });
+
+    return [...header, ...taskLines].join('\n\n');
+  };
+
+  const handleSendToWhatsApp = (sectionLabel: string, sectionTasks: Task[]) => {
+    try {
+      const message = buildWhatsAppMessage(sectionLabel, sectionTasks);
+      const whatsappUrl = `https://wa.me/?text=${encodeURIComponent(message)}`;
+      window.open(whatsappUrl, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      setError('Unable to open WhatsApp');
+      setTimeout(() => setError(''), 3000);
+    }
+  };
+
   const handleAddTask = async () => {
     if (!formData.title.trim()) {
       setError('Task title is required');
@@ -297,13 +337,22 @@ const UserDashboard: React.FC = () => {
           onDragLeave={handleDragLeave}
           onDrop={(e) => handleDrop(e, 'todo')}
         >
-          <div className="flex justify-between items-center mb-6">          <div>
+          <div className="flex justify-between items-center mb-6">
+            <div>
               <h3 className="text-gray-800 text-xl font-bold">📋 To Do</h3>
               <span className="inline-block bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm font-semibold mt-1">{todoTasks.length} tasks</span>
             </div>
-            <button onClick={() => { setFormData({ title: '', description: '' }); setShowAddModal(true); setError(''); }} className="px-5 py-2 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/40">
-              + Add Task
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => handleSendToWhatsApp('To Do', todoTasks)}
+                className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 hover:bg-green-600 hover:shadow-lg"
+              >
+                WhatsApp
+              </button>
+              <button onClick={() => { setFormData({ title: '', description: '' }); setShowAddModal(true); setError(''); }} className="px-5 py-2 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-primary/40">
+                + Add Task
+              </button>
+            </div>
           </div>
 
           {isDraggingOver === 'todo' && (
@@ -379,6 +428,12 @@ const UserDashboard: React.FC = () => {
               <h3 className="text-gray-800 text-xl font-bold">🚀 Doing</h3>
               <span className="inline-block bg-blue-100 text-blue-600 px-3 py-1 rounded-full text-sm font-semibold mt-1">{doingTasks.length} in progress</span>
             </div>
+            <button
+              onClick={() => handleSendToWhatsApp('In Progress', doingTasks)}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 hover:bg-green-600 hover:shadow-lg"
+            >
+              WhatsApp
+            </button>
           </div>
 
           {isDraggingOver === 'doing' && (
@@ -445,6 +500,12 @@ const UserDashboard: React.FC = () => {
               <h3 className="text-gray-800 text-xl font-bold">✅ Done</h3>
               <span className="inline-block bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-sm font-semibold mt-1">{doneTasks.length} tasks</span>
             </div>
+            <button
+              onClick={() => handleSendToWhatsApp('Done', doneTasks)}
+              className="px-4 py-2 bg-green-500 text-white rounded-lg text-sm font-semibold transition-all hover:-translate-y-0.5 hover:bg-green-600 hover:shadow-lg"
+            >
+              WhatsApp
+            </button>
           </div>
 
           {isDraggingOver === 'done' && (

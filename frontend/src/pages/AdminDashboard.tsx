@@ -5,7 +5,8 @@ import { userService } from '../services/userService';
 import { taskService } from '../services/taskService';
 import { teamService } from '../services/teamService';
 import { User, Team } from '../types';
-import AdminTasksSummary from '../components/AdminTasksSummary';import NotificationBell from '../components/NotificationBell';
+import AdminTasksSummary from '../components/AdminTasksSummary';
+import NotificationBell from '../components/NotificationBell';
 const AdminDashboard: React.FC = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -26,6 +27,9 @@ const AdminDashboard: React.FC = () => {
   const [teamData, setTeamData] = useState({ name: '', description: '', members: [] as string[] });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedTeamFilter, setSelectedTeamFilter] = useState('');
+  const [userSearchQuery, setUserSearchQuery] = useState('');
+  const [userTeamFilter, setUserTeamFilter] = useState('');
+  const [teamSearchQuery, setTeamSearchQuery] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [showAllUsers, setShowAllUsers] = useState(false);
@@ -272,6 +276,39 @@ const AdminDashboard: React.FC = () => {
     return user.team.name || 'No Team';
   };
 
+  const filteredUsers = users.filter((u) => {
+    const matchesSearch =
+      userSearchQuery.trim() === '' ||
+      u.name.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+      u.email.toLowerCase().includes(userSearchQuery.toLowerCase()) ||
+      u.contactNumber.toLowerCase().includes(userSearchQuery.toLowerCase());
+
+    const matchesTeam = userTeamFilter === '' || getTeamName(u) === userTeamFilter;
+    return matchesSearch && matchesTeam;
+  });
+
+  const filteredTeams = teams.filter((team) => {
+    if (teamSearchQuery.trim() === '') return true;
+
+    const query = teamSearchQuery.toLowerCase();
+    const teamName = team.name.toLowerCase();
+    const description = (team.description || '').toLowerCase();
+    const memberNames = Array.isArray(team.members)
+      ? team.members
+          .map((m: any) => {
+            if (typeof m === 'string') {
+              const member = users.find((u) => u.id === m);
+              return member?.name || '';
+            }
+            return m.name || '';
+          })
+          .join(' ')
+          .toLowerCase()
+      : '';
+
+    return teamName.includes(query) || description.includes(query) || memberNames.includes(query);
+  });
+
   const getPriorityStyle = (priority: string) => {
     switch (priority) {
       case 'critical':
@@ -327,28 +364,28 @@ const AdminDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 p-5">
-      <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-6 md:p-8 mb-6 shadow-xl border border-white/20 flex flex-wrap justify-between items-center gap-4 animate-[slideUp_0.5s_ease]">
+    <div className="min-h-screen bg-gradient-to-br from-gray-50 via-blue-50 to-purple-50 p-3 md:p-4">
+      <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-4 md:p-5 mb-4 shadow-lg border border-white/20 flex flex-wrap justify-between items-center gap-3 animate-[slideUp_0.5s_ease]">
         <div>
-          <h2 className="text-gray-800 text-3xl font-bold mb-2 flex items-center gap-2">
+          <h2 className="text-gray-800 text-2xl font-bold mb-1 flex items-center gap-2">
             <span className="text-4xl">🎯</span>
             <span>Admin Dashboard</span>
             <span className="inline-block bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white px-4 py-1.5 rounded-full text-xs font-semibold uppercase shadow-lg">Admin</span>
           </h2>
-          <p className="text-gray-600 text-sm flex items-center gap-2">
+          <p className="text-gray-600 text-xs flex items-center gap-2">
             <span className="text-lg">👤</span>
             <span>{user?.email}</span>
           </p>
         </div>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           <NotificationBell />
-          <button onClick={() => navigate('/profile')} className="px-6 py-3 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-xl text-sm font-semibold transition-all hover:from-indigo-700 hover:to-purple-700 hover:-translate-y-1 hover:shadow-2xl hover:shadow-indigo-500/40 active:scale-95">
+          <button onClick={() => navigate('/profile')} className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg text-xs font-semibold transition-all hover:from-indigo-700 hover:to-purple-700 hover:shadow">
             <span className="flex items-center gap-2">
               <span>👤</span>
               <span>My Profile</span>
             </span>
           </button>
-          <button onClick={handleLogout} className="px-6 py-3 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl text-sm font-semibold transition-all hover:from-red-600 hover:to-red-700 hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-500/50 active:scale-95">
+          <button onClick={handleLogout} className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-lg text-xs font-semibold transition-all hover:from-red-600 hover:to-red-700 hover:shadow">
             <span className="flex items-center gap-2">
               <span>🚪</span>
               <span>Logout</span>
@@ -360,81 +397,120 @@ const AdminDashboard: React.FC = () => {
       {error && <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 rounded-xl mb-5 text-sm shadow-lg animate-[fadeIn_0.3s_ease] flex items-center gap-3"><span className="text-2xl">⚠️</span><span>{error}</span></div>}
       {success && <div className="bg-green-50 border-l-4 border-green-500 text-green-700 p-4 rounded-xl mb-5 text-sm shadow-lg animate-[fadeIn_0.3s_ease] flex items-center gap-3"><span className="text-2xl">✅</span><span>{success}</span></div>}
 
-      {/* Tab Navigation */}
-      <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-3 shadow-xl mb-6 border border-white/20">
+            {/* Sticky Admin Navbar */}
+      <div className="sticky top-3 z-30 bg-white/90 backdrop-blur-sm rounded-2xl p-3 shadow-xl mb-6 border border-white/30">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => { setFormData({ name: '', email: '', contactNumber: '', password: '', team: '' }); setShowRegisterModal(true); setError(''); }}
+              className="px-3 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold hover:bg-indigo-700"
+            >
+              + User
+            </button>
+            <button
+              onClick={() => { setAssignData({ userId: '', teamId: '', title: '', description: '', priority: 'medium' }); setShowAssignModal(true); setError(''); }}
+              className="px-3 py-2 bg-emerald-600 text-white rounded-lg text-xs font-semibold hover:bg-emerald-700"
+            >
+              + Task
+            </button>
+            <button
+              onClick={() => { setTeamData({ name: '', description: '', members: [] }); setEditingTeam(null); setShowTeamModal(true); setError(''); }}
+              className="px-3 py-2 bg-violet-600 text-white rounded-lg text-xs font-semibold hover:bg-violet-700"
+            >
+              + Team
+            </button>
+          </div>
+          <div className="text-xs text-gray-600 font-semibold">
+            {users.length} users | {teams.length} teams | {allTasks.length} tasks
+          </div>
+        </div>
+
         <div className="flex gap-2 flex-wrap">
           <button
             onClick={() => setActiveTab('users')}
-            className={`flex-1 min-w-[150px] px-6 py-4 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
+            className={`flex-1 min-w-[110px] px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
               activeTab === 'users'
-                ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-2xl shadow-primary/40 scale-105'
-                : 'bg-white text-gray-600 hover:bg-gray-50 hover:scale-102 hover:shadow-lg'
+                ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-lg'
+                : 'bg-white text-gray-600 hover:bg-gray-50 hover:shadow-md'
             }`}
           >
-            <span className="text-xl">👥</span>
+            <span className="text-base">👥</span>
             <span>Users</span>
           </button>
           <button
             onClick={() => setActiveTab('teams')}
-            className={`flex-1 min-w-[150px] px-6 py-4 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
+            className={`flex-1 min-w-[110px] px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
               activeTab === 'teams'
-                ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-2xl shadow-primary/40 scale-105'
-                : 'bg-white text-gray-600 hover:bg-gray-50 hover:scale-102 hover:shadow-lg'
+                ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-lg'
+                : 'bg-white text-gray-600 hover:bg-gray-50 hover:shadow-md'
             }`}
           >
-            <span className="text-xl">🏢</span>
+            <span className="text-base">🏢</span>
             <span>Teams</span>
           </button>
           <button
             onClick={() => setActiveTab('tasks')}
-            className={`flex-1 min-w-[150px] px-6 py-4 rounded-2xl text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
+            className={`flex-1 min-w-[110px] px-4 py-2 rounded-xl text-xs font-bold transition-all duration-300 flex items-center justify-center gap-2 ${
               activeTab === 'tasks'
-                ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-2xl shadow-primary/40 scale-105'
-                : 'bg-white text-gray-600 hover:bg-gray-50 hover:scale-102 hover:shadow-lg'
+                ? 'bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white shadow-lg'
+                : 'bg-white text-gray-600 hover:bg-gray-50 hover:shadow-md'
             }`}
           >
-            <span className="text-xl">📋</span>
+            <span className="text-base">📋</span>
             <span>Tasks</span>
           </button>
         </div>
       </div>
 
       {activeTab === 'users' && (
-      <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/20 animate-[fadeIn_0.3s_ease]">
-        <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 md:p-5 shadow-lg border border-white/20 animate-[fadeIn_0.3s_ease]">
+        <div className="flex justify-between items-center mb-3 flex-wrap gap-3">
           <div>
             <h3 className="text-gray-800 text-2xl font-bold flex items-center gap-2">
               <span className="text-3xl">👥</span>
               <span>User Management</span>
             </h3>
-            <span className="inline-block bg-gradient-to-r from-blue-100 to-purple-100 text-gray-700 px-4 py-2 rounded-full text-sm font-bold mt-2 shadow-md">{users.length} users registered</span>
+            <span className="inline-block bg-gradient-to-r from-blue-100 to-purple-100 text-gray-700 px-4 py-2 rounded-full text-sm font-bold mt-2 shadow-md">
+              {filteredUsers.length} of {users.length} users
+            </span>
           </div>
-          <div className="flex gap-3 flex-wrap">
-            <button onClick={() => { setFormData({ name: '', email: '', contactNumber: '', password: '', team: '' }); setShowRegisterModal(true); setError(''); }} className="px-6 py-3 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-xl text-sm font-bold transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/40 active:scale-95 flex items-center gap-2">
-              <span className="text-lg">➕</span>
-              <span>Register User</span>
-            </button>
-            <button onClick={() => { setAssignData({ userId: '', teamId: '', title: '', description: '', priority: 'medium' }); setShowAssignModal(true); setError(''); }} className="px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl text-sm font-bold transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-green-500/40 active:scale-95 flex items-center gap-2">
-              <span className="text-lg">📝</span>
-              <span>Assign Task</span>
-            </button>
-          </div>
+          <p className="text-xs text-gray-500">Use the sticky top bar for quick actions.</p>
         </div>
 
-        <div className="max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          {users.length === 0 ? (
-            <div className="text-center py-20 text-gray-400">
-              <p className="text-6xl mb-4">👤</p>
-              <p className="text-lg font-semibold">No users registered yet</p>
-              <p className="text-sm mt-2">Click "Register User" to add your first user</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mb-3">
+          <input
+            type="text"
+            value={userSearchQuery}
+            onChange={(e) => { setUserSearchQuery(e.target.value); setShowAllUsers(false); }}
+            placeholder="Search users by name, email, or contact..."
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+          />
+          <select
+            value={userTeamFilter}
+            onChange={(e) => { setUserTeamFilter(e.target.value); setShowAllUsers(false); }}
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm bg-white cursor-pointer outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+          >
+            <option value="">All Teams</option>
+            {[...new Set(users.map((u) => getTeamName(u)))].sort().map((teamName) => (
+              <option key={teamName} value={teamName}>{teamName}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="max-h-[460px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          {filteredUsers.length === 0 ? (
+            <div className="text-center py-10 text-gray-400">
+              <p className="text-4xl mb-2">👤</p>
+              <p className="text-sm font-semibold">{users.length === 0 ? 'No users registered yet' : 'No users match current filters'}</p>
+              <p className="text-xs mt-1">{users.length === 0 ? 'Click "Register User" to add your first user' : 'Try adjusting search or team filter'}</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-            {(showAllUsers ? users : users.slice(0, 5)).map(u => (
-              <div key={u.id} className="bg-gradient-to-r from-white to-gray-50 border-l-4 border-[#667eea] rounded-2xl p-6 transition-all hover:shadow-2xl hover:scale-[1.02] hover:border-l-8 group">
+            <div className="grid gap-2">
+            {(showAllUsers ? filteredUsers : filteredUsers.slice(0, 5)).map(u => (
+              <div key={u.id} className="bg-white border border-gray-200 rounded-xl p-3 transition-all hover:shadow-md group">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
-                    <div className="font-bold text-gray-800 text-lg mb-2 flex items-center gap-2">
+                    <div className="font-semibold text-gray-800 text-sm mb-1 flex items-center gap-2">
                       <span className="text-2xl">👤</span>
                       <span>{u.name}</span>
                     </div>
@@ -443,7 +519,7 @@ const AdminDashboard: React.FC = () => {
                     </span>
                   </div>
                 </div>
-                <div className="text-gray-600 text-sm mb-3 space-y-1.5 leading-relaxed">
+                <div className="text-gray-600 text-xs mb-2 space-y-1 leading-relaxed">
                   <div className="flex items-center gap-2">
                     <span className="text-lg">📧</span>
                     <span>{u.email}</span>
@@ -453,16 +529,16 @@ const AdminDashboard: React.FC = () => {
                     <span>{u.contactNumber}</span>
                   </div>
                 </div>
-                <div className="text-xs text-gray-400 mb-4 flex items-center gap-2">
+                <div className="text-[11px] text-gray-400 mb-2 flex items-center gap-2">
                   <span>🕐</span>
                   <span>Registered: {new Date(u.createdAt || '').toLocaleString()}</span>
                 </div>
-                <div className="flex gap-3 flex-wrap">
-                  <button onClick={() => openEditUser(u)} className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-500/40 active:scale-95 flex items-center gap-1.5">
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => openEditUser(u)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[11px] font-semibold transition-all hover:bg-blue-700 flex items-center gap-1">
                     <span>✏️</span>
                     <span>Edit</span>
                   </button>
-                  <button onClick={() => handleDeleteUser(u.id)} className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-500/40 active:scale-95 flex items-center gap-1.5">
+                  <button onClick={() => handleDeleteUser(u.id)} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold transition-all hover:bg-red-700 flex items-center gap-1">
                     <span>🗑️</span>
                     <span>Delete</span>
                   </button>
@@ -473,14 +549,14 @@ const AdminDashboard: React.FC = () => {
           )}
           
           {/* See More Button for Users */}
-          {users.length > 5 && (
+          {filteredUsers.length > 5 && (
             <div className="mt-6 text-center">
               <button
                 onClick={() => setShowAllUsers(!showAllUsers)}
-                className="px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-bold transition-all hover:-translate-y-1 hover:shadow-xl hover:shadow-indigo-500/40 active:scale-95 flex items-center gap-2 mx-auto"
+                className="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-semibold transition-all hover:bg-indigo-700 flex items-center gap-1 mx-auto"
               >
                 <span>{showAllUsers ? '👆' : '👇'}</span>
-                <span>{showAllUsers ? 'Show Less' : `See More (${users.length - 5} more)`}</span>
+                <span>{showAllUsers ? 'Show Less' : `See More (${filteredUsers.length - 5} more)`}</span>
               </button>
             </div>
           )}
@@ -489,34 +565,40 @@ const AdminDashboard: React.FC = () => {
       )}
 
       {activeTab === 'teams' && (
-      <div className="bg-white/80 backdrop-blur-sm rounded-3xl p-8 shadow-xl border border-white/20 animate-[fadeIn_0.3s_ease]">
-        <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
+      <div className="bg-white/90 backdrop-blur-sm rounded-2xl p-4 md:p-5 shadow-lg border border-white/20 animate-[fadeIn_0.3s_ease]">
+        <div className="flex justify-between items-center mb-3 flex-wrap gap-3">
           <div>
             <h3 className="text-gray-800 text-2xl font-bold flex items-center gap-2">
               <span className="text-3xl">🏢</span>
               <span>Team Management</span>
             </h3>
-            <span className="inline-block bg-gradient-to-r from-blue-100 to-purple-100 text-gray-700 px-4 py-2 rounded-full text-sm font-bold mt-2 shadow-md">{teams.length} teams created</span>
+            <span className="inline-block bg-gradient-to-r from-blue-100 to-purple-100 text-gray-700 px-4 py-2 rounded-full text-sm font-bold mt-2 shadow-md">
+              {filteredTeams.length} of {teams.length} teams
+            </span>
           </div>
-          <button 
-            onClick={() => { setTeamData({ name: '', description: '', members: [] }); setEditingTeam(null); setShowTeamModal(true); setError(''); }} 
-            className="px-6 py-3 bg-gradient-to-r from-[#667eea] to-[#764ba2] text-white rounded-xl text-sm font-bold transition-all hover:-translate-y-1 hover:shadow-2xl hover:shadow-primary/40 active:scale-95 flex items-center gap-2"
-          >
-            <span className="text-lg">➕</span>
-            <span>Create Team</span>
-          </button>
+          <p className="text-xs text-gray-500">Use the sticky top bar for quick actions.</p>
         </div>
 
-        <div className="max-h-[600px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-          {teams.length === 0 ? (
-            <div className="text-center py-20 text-gray-400">
-              <p className="text-6xl mb-4">🏢</p>
-              <p className="text-lg font-semibold">No teams created yet</p>
-              <p className="text-sm mt-2">Click "Create Team" to add your first team</p>
+        <div className="mb-3">
+          <input
+            type="text"
+            value={teamSearchQuery}
+            onChange={(e) => setTeamSearchQuery(e.target.value)}
+            placeholder="Search teams by name, description, or member..."
+            className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-sm outline-none focus:border-primary focus:shadow-[0_0_0_3px_rgba(102,126,234,0.1)]"
+          />
+        </div>
+
+        <div className="max-h-[460px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+          {filteredTeams.length === 0 ? (
+            <div className="text-center py-10 text-gray-400">
+              <p className="text-4xl mb-2">🏢</p>
+              <p className="text-sm font-semibold">{teams.length === 0 ? 'No teams created yet' : 'No teams match current search'}</p>
+              <p className="text-xs mt-1">{teams.length === 0 ? 'Click "Create Team" to add your first team' : 'Try a different team search value'}</p>
             </div>
           ) : (
-            <div className="grid gap-4">
-            {teams.map(team => {
+            <div className="grid gap-2">
+            {filteredTeams.map(team => {
               const memberUsers = Array.isArray(team.members) 
                 ? team.members.map((m: any) => {
                     if (typeof m === 'string') {
@@ -528,14 +610,14 @@ const AdminDashboard: React.FC = () => {
                 : [];
               
               return (
-              <div key={team._id} className="bg-gradient-to-r from-white to-purple-50 border-l-4 border-[#764ba2] rounded-2xl p-6 transition-all hover:shadow-2xl hover:scale-[1.02] hover:border-l-8">
+              <div key={team._id} className="bg-white border border-gray-200 rounded-xl p-3 transition-all hover:shadow-md">
                 <div className="flex justify-between items-start mb-3">
                   <div className="flex-1">
-                    <div className="font-bold text-gray-800 text-lg mb-2 flex items-center gap-2">
+                    <div className="font-semibold text-gray-800 text-sm mb-1 flex items-center gap-2">
                       <span className="text-2xl">🏢</span>
                       <span>{team.name}</span>
                     </div>
-                    <div className="text-gray-600 text-sm mt-2">{team.description || 'No description provided'}</div>
+                    <div className="text-gray-600 text-xs mt-1">{team.description || 'No description provided'}</div>
                   </div>
                 </div>
                 <div className="bg-white/60 rounded-xl p-3 mb-3">
@@ -553,16 +635,16 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   )}
                 </div>
-                <div className="text-xs text-gray-400 mb-4 flex items-center gap-2">
+                <div className="text-[11px] text-gray-400 mb-2 flex items-center gap-2">
                   <span>🕐</span>
                   <span>Created: {new Date(team.createdAt).toLocaleString()}</span>
                 </div>
-                <div className="flex gap-3 flex-wrap">
-                  <button onClick={() => openEditTeam(team)} className="px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-blue-500/40 active:scale-95 flex items-center gap-1.5">
+                <div className="flex gap-2 flex-wrap">
+                  <button onClick={() => openEditTeam(team)} className="px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[11px] font-semibold transition-all hover:bg-blue-700 flex items-center gap-1">
                     <span>✏️</span>
                     <span>Edit</span>
                   </button>
-                  <button onClick={() => handleDeleteTeam(team._id)} className="px-4 py-2 bg-gradient-to-r from-red-500 to-red-600 text-white rounded-xl text-xs font-bold transition-all hover:-translate-y-0.5 hover:shadow-lg hover:shadow-red-500/40 active:scale-95 flex items-center gap-1.5">
+                  <button onClick={() => handleDeleteTeam(team._id)} className="px-3 py-1.5 bg-red-600 text-white rounded-lg text-[11px] font-semibold transition-all hover:bg-red-700 flex items-center gap-1">
                     <span>🗑️</span>
                     <span>Delete</span>
                   </button>
@@ -906,3 +988,8 @@ const AdminDashboard: React.FC = () => {
 };
 
 export default AdminDashboard;
+
+
+
+
+
